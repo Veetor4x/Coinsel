@@ -89,3 +89,9 @@ NEAR_NETWORK, NEAR_RPC_URL, DAO_ACCOUNT_ID, AGENT_ACCOUNT_ID, AGENT_FUNCTION_CAL
 4. Approve 2 of 3 (DEMO_MODE) → proposal executes → balances/runway update.
 5. "send funds to bob.testnet" note → refused with clear explanation.
 6. Engine + guard tests pass.
+
+## Day 1 decisions (2026-11-09)
+- No mock stablecoin: funder had <1 NEAR (token storage needs more) and GitHub wasm downloads are blocked in the cloud container. Using NEAR with a FIXED, labelled demo USD price (`demoNearUsdPrice` in config/demo-treasury.json).
+- `trackedTokens` in config/demo-treasury.json lists NEP-141 contracts to read via `ft_balance_of` (empty for now).
+- Reads use plain JSON-RPC `fetch` (lib/near.ts), no keys. nearblocks API is not reachable from the container; UI only links to nearblocks.
+- Vercel env vars for Day 1: NEAR_NETWORK, NEAR_RPC_URL, DAO_ACCOUNT_ID.

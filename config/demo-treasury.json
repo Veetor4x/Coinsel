@@ -1,6 +1,16 @@
 {
-  "_note": "Day 0 placeholder. DEMO DATA — mocked values are labelled. Real DAO id comes from DAO_ACCOUNT_ID.",
-  "watchedAccounts": [],
-  "obligations": [],
-  "mockBalances": []
+  "_note": "DEMO DATA. Obligations and the other-chain balance are NOT on-chain. The NEAR/USD price is a fixed demo number, not a market price. Real balances come from the DAO on NEAR testnet.",
+  "demoNearUsdPrice": 3,
+  "trackedTokens": [],
+  "obligations": [
+    { "id": "payroll-alice", "label": "Payroll – Alice (design)", "amountNear": 2, "dueInDays": 9, "kind": "payroll", "note": "" },
+    { "id": "payroll-bola", "label": "Payroll – Bola (engineering)", "amountNear": 2, "dueInDays": 9, "kind": "payroll", "note": "" },
+    { "id": "payroll-chidi", "label": "Payroll – Chidi (community)", "amountNear": 2, "dueInDays": 9, "kind": "payroll", "note": "" },
+    { "id": "payroll-dayo", "label": "Payroll – Dayo (ops)", "amountNear": 2, "dueInDays": 9, "kind": "payroll", "note": "" },
+    { "id": "payroll-ebere", "label": "Payroll – Ebere (writing)", "amountNear": 2, "dueInDays": 9, "kind": "payroll", "note": "" },
+    { "id": "grant-open-source", "label": "Grant – open-source tooling", "amountNear": 3, "dueInDays": 30, "kind": "grant", "note": "Milestone 1 of 2" }
+  ],
+  "otherChainBalances": [
+    { "chain": "Ethereum", "symbol": "USDC", "amount": 12500, "usdValue": 12500 }
+  ]
 }
