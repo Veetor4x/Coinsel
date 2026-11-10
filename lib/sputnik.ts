@@ -30,7 +30,8 @@ export async function getRecentProposals(dao: string, max = 5): Promise<Proposal
   const last = await viewFunction<number>(dao, "get_last_proposal_id");
   if (!last) return [];
   const from = Math.max(0, last - max);
-  const raw = await viewFunction<any[]>(dao, "get_proposals", { from_index: from, limit: max });
+  type RawProposal = { id: number; proposer: string; description?: string; kind: string | Record<string, unknown>; status: string; submission_time: string };
+  const raw = await viewFunction<RawProposal[]>(dao, "get_proposals", { from_index: from, limit: max });
   return raw
     .map((p) => ({
       id: p.id,

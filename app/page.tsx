@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { analyze, type Balance, type Severity } from "@/lib/engine";
+import AskCoinsel from "./AskCoinsel";
 
 type Obligation = { id: string; label: string; amountNear: number; dueInDays: number; kind: string; note: string };
 type Data = {
@@ -65,14 +66,13 @@ export default function Home() {
   const [obs, setObs] = useState<Obligation[]>([]); // client-side only, no database
 
   const load = () => {
-    setError(null);
     fetch("/api/treasury").then(async (r) => {
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Request failed");
-      setData(j); setObs((cur) => (cur.length ? cur : j.demo.obligations));
+      setError(null); setData(j); setObs((cur) => (cur.length ? cur : j.demo.obligations));
     }).catch((e) => setError(e.message));
   };
-  useEffect(load, []);
+  useEffect(() => { load(); }, []);
 
   const calc = useMemo(() => {
     if (!data) return null;
@@ -118,7 +118,7 @@ export default function Home() {
 
       {error && (
         <div className="mb-6 rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-300">
-          {error} <button onClick={load} className="ml-2 underline">Retry</button>
+          {error} <button onClick={() => { setError(null); load(); }} className="ml-2 underline">Retry</button>
         </div>
       )}
       {!data && !error && <p className="text-zinc-500">Reading the treasury…</p>}
@@ -196,6 +196,7 @@ export default function Home() {
                     </li>
                   ))}
                 </ul>
+                <AskCoinsel obligations={obs.map((o) => ({ id: o.id, label: o.label, amountNear: o.amountNear, dueInDays: o.dueInDays }))} />
                 {health.shortfalls.length > 0 && (
                   <details className="mt-3 text-xs text-zinc-500">
                     <summary className="cursor-pointer">Details</summary>
