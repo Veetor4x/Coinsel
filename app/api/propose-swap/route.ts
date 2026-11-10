@@ -11,15 +11,24 @@ import { freshLiveQuote, getSwapStatus, swapReadiness, tidepoolEnabled, toBase, 
 import { buildSwapDescription } from "@/lib/proposal-text";
 import { explorerAccountUrl } from "@/lib/near";
 import { env } from "@/lib/env";
+import { readJson } from "@/lib/validate";
+import { withLock } from "@/lib/lock";
 
 export const maxDuration = 60;
 const HEX = /^[0-9a-f]{64}$/;
 const T = demo.tidepool;
 
 export async function POST(req: Request) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const b = (await readJson(req)) as any;
+  // One filing at a time: two quick requests can't both pass the "only one open swap" check.
+  return withLock("propose-swap", () => handle(b));
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function handle(b: any) {
   const dao = env("DAO_ACCOUNT_ID");
   if (!tidepoolEnabled()) return NextResponse.json({ error: "The real test swap is switched off on this server." }, { status: 403 });
-  const b = await req.json().catch(() => null);
   const obs = parseObligations(b?.obligations ?? []);
   const text = typeof b?.advice?.text === "string" ? b.advice.text.slice(0, 1200) : "";
   if (!dao || !obs || !text || !HEX.test(b?.advice?.responseHash ?? "") || !HEX.test(b?.attestationHash ?? "")) {
@@ -35,7 +44,7 @@ export async function POST(req: Request) {
     // An open swap whose quote has already expired can't be approved any more (demo voting refuses it), so it doesn't block a new one.
     const openStatus = open?.swap ? await getSwapStatus(open.swap.depositAddress).catch(() => null) : null;
     const openExpired = !!openStatus && (openStatus.status === "FAILED" || (!!openStatus.deadline && Date.parse(openStatus.deadline) < Date.now()));
-    if (open && !openExpired) return NextResponse.json({ error: `Swap suggestion #${open.id} is still waiting for the council. Vote on it first (or reset the demo).`, proposalId: open.id }, { status: 409 });
+    if (open && !openExpired) return NextResponse.json({ status: "duplicate", message: `Already filed as #${open.id}. It is still waiting for the council: vote on it first (or reset the demo).`, error: `Already filed as #${open.id}.`, proposalId: open.id }, { status: 409 });
 
     const ready = await swapReadiness(dao);
     if (ready.missing.length) return NextResponse.json({ error: ready.missing[0], missing: ready.missing, readiness: ready }, { status: 409 });

@@ -43,7 +43,7 @@ export function checkDestination(receiver: string, owned: string[] = ownedAccoun
 /** Check all obligation notes. Returns the first problem, naming the payout it came from. */
 export function checkObligations(obs: { label: string; note?: string }[], owned: string[] = ownedAccounts()): GuardResult & { label?: string } {
   for (const o of obs) {
-    const r = checkText(`${o.note ?? ""}`, owned);
+    const r = checkText(`${o.note ?? ""}\n${o.label ?? ""}`, owned); // labels reach the AI too, so they are scanned like notes
     if (!r.ok) return { ...r, label: o.label };
   }
   return { ok: true };
