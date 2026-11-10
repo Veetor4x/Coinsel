@@ -1,6 +1,7 @@
 // Safety guard. Money may only move to accounts the DAO owns (listed in config/demo-treasury.json).
 // Obligation notes and AI text are UNTRUSTED: we scan them and refuse anything that points outside.
 import demo from "@/config/demo-treasury.json";
+import { env } from "./env";
 
 const NEAR_ID = /\b(?:[a-z0-9]+(?:[-_][a-z0-9]+)*\.)+(?:testnet|near)\b/gi;
 const IMPLICIT = /\b[0-9a-f]{64}\b/gi;
@@ -10,7 +11,7 @@ export const BLOCKED_MESSAGE =
   "Blocked: that address isn't yours. And Coinsel can't send money anyway — it can only suggest.";
 
 /** The DAO-owned accounts: config list, plus the DAO from the environment. */
-export function ownedAccounts(extra: (string | undefined)[] = [process.env.DAO_ACCOUNT_ID]): string[] {
+export function ownedAccounts(extra: (string | undefined)[] = [env("DAO_ACCOUNT_ID")]): string[] {
   const all = [...demo.daoOwnedAccounts, ...extra.filter((x): x is string => !!x)];
   return [...new Set(all.map((a) => a.toLowerCase()))];
 }

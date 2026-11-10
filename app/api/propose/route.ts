@@ -11,12 +11,13 @@ import { getDryQuote, usdcToQuote } from "@/lib/intents";
 import { buildDescription } from "@/lib/proposal-text";
 import { fileTransferProposal } from "@/lib/chain-write";
 import { explorerAccountUrl } from "@/lib/near";
+import { env } from "@/lib/env";
 
 export const maxDuration = 60;
 const HEX = /^[0-9a-f]{64}$/;
 
 export async function POST(req: Request) {
-  const dao = process.env.DAO_ACCOUNT_ID;
+  const dao = env("DAO_ACCOUNT_ID");
   const b = await req.json().catch(() => null);
   const obs = parseObligations(b?.obligations ?? []);
   const text = typeof b?.advice?.text === "string" ? b.advice.text.slice(0, 1200) : "";

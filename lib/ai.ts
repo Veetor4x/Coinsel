@@ -8,10 +8,11 @@
 import { createHash } from "node:crypto";
 import type { HealthReport } from "./engine";
 import { NEARAI_BASE } from "./attestation";
+import { env } from "./env";
 
 /** Approved model: NEAR AI's own attested TEE. Fallback if unavailable: deepseek/deepseek-v3.2. */
 export const DEFAULT_MODEL = "deepseek-ai/DeepSeek-V4.1-Flash-1017";
-export const getModel = () => process.env.NEARAI_MODEL?.trim() || DEFAULT_MODEL;
+export const getModel = () => env("NEARAI_MODEL")?.trim() || DEFAULT_MODEL;
 
 /** USD per million tokens for the default model (from the models endpoint, 2026-11-10). */
 export const PRICE_PER_M = { input: 0.3, output: 1.2 };

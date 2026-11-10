@@ -10,11 +10,12 @@ import { loadTreasury } from "@/lib/treasury";
 import { getDryQuote, usdcToQuote } from "@/lib/intents";
 import { summarize, verifyAnswer, verifyModel, type AttestationResult } from "@/lib/attestation";
 import { getAdvice, getModel, type AdvicePlan } from "@/lib/ai";
+import { env } from "@/lib/env";
 
 export const maxDuration = 120;
 
 export async function POST(req: Request) {
-  const apiKey = process.env.NEARAI_API_KEY;
+  const apiKey = env("NEARAI_API_KEY");
   const body = await req.json().catch(() => null);
   const obs = parseObligations(body?.obligations);
   if (!obs) return NextResponse.json({ error: "Those payouts don't look right. Check the amounts and dates." }, { status: 400 });

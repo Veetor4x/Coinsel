@@ -139,3 +139,10 @@ NEAR_NETWORK, NEAR_RPC_URL, DAO_ACCOUNT_ID, AGENT_ACCOUNT_ID, AGENT_FUNCTION_CAL
 - Two-step story from ONE plan computed in code (analyze/propose): step 1 = move the gap reserve -> payroll (this proposal); step 2 = refill reserve from idle USDC on Ethereum, quote only, sized = gap (`usdcToQuote`). The AI payload carries `plan`; the proposal text has Step 1/Step 2.
 - POST /api/reset-demo (DEMO_MODE only): payroll account sends its surplus back to the DAO (only destination: the DAO; gas buffer 0.0005). In-memory lock + 8 s cooldown (covers one serverless instance). `needs-topup` when the reserve could not cover the starting gap. Needs PAYROLL_PRIVATE_KEY.
 - UI holds the expected payroll balance after a vote/reset so a lagging chain read can't flip the alert back; the update is absolute (not relative) because the 5 s poll may already have the new balance.
+
+## Day 4b decisions (2026-11-10) — the "wow" pass
+- Env values are read through `lib/env.ts` (`env()` trims; `isDemoMode()`); never use `process.env` directly in app/lib code.
+- Health alert leads with the TOTAL gap ("We're short by $3,000 in total.") so it matches the headline.
+- Reset first closes open Coinsel suggestions (demo council votes Reject until closed; only agent-filed Transfers), then sends payroll surplus back.
+- Landing: `app/Hero.tsx` (hero, radar with live blips, tilted marquee, 3-card safety section), `app/Extras.tsx` (sound toggle, counsel log, "Covered" burst), `app/motion.tsx` (reveal, count-up, reduced-motion).
+- Sound (`lib/sound.ts`): Web Audio only, no files; OFF by default; choice in localStorage (try/catch); audio starts after the first tap (browser rule). Count-ups show the real number first and only animate on scroll-in. Cards with buttons never float.

@@ -9,6 +9,10 @@ import type { Treasury } from "@/lib/treasury";
 import type { QuoteResult } from "@/lib/intents";
 import type { HealthReport } from "@/lib/engine";
 import { VerifiedPanel, type AttestationView } from "./AskCoinsel";
+import { Hero, Marquee, Safety, type Live } from "./Hero";
+import { Burst, CounselLog, SoundToggle } from "./Extras";
+import { CountUp, useInView, useReducedMotion } from "./motion";
+import { sound } from "@/lib/sound";
 
 type Data = Omit<Treasury, "proposals"> & { proposals: (Treasury["proposals"][number])[] };
 type Ok = {
@@ -50,18 +54,20 @@ const TONE: Record<Severity, string> = {
   info: "border-white/10 bg-white/5 text-zinc-200",
   ok: "border-[#C6FF3D]/40 bg-[#C6FF3D]/10 text-[#C6FF3D]",
 };
-function Stat({ label, value, tone }: { label: string; value: string; tone: "good" | "warn" | "bad" | "neutral" }) {
+function Stat({ label, value, tone, burst }: { label: string; value: React.ReactNode; tone: "good" | "warn" | "bad" | "neutral"; burst?: number }) {
   const c = { good: "text-[#C6FF3D]", warn: "text-[#FFC56E]", bad: "text-[#FF9A82]", neutral: "text-zinc-100" }[tone];
   return (
-    <div className="min-w-0 rounded-xl border border-white/10 bg-black/20 p-3">
+    <div key={burst} className={`relative min-w-0 rounded-xl border bg-black/20 p-3 transition-colors duration-700 ${burst ? "burst-pop border-[#C6FF3D]/60" : "border-white/10"}`}>
+      {!!burst && <Burst key={burst} />}
       <div className="text-xs text-zinc-500">{label}</div>
       <div className={`break-words text-2xl font-semibold ${c}`}>{value}</div>
     </div>
   );
 }
-function Card({ title, right, children, className = "" }: { title: string; right?: React.ReactNode; children: React.ReactNode; className?: string }) {
+function Card({ title, right, children, className = "", id }: { title: string; right?: React.ReactNode; children: React.ReactNode; className?: string; id?: string }) {
+  const [ref, seen] = useInView<HTMLElement>(); // rises in when scrolled into view
   return (
-    <section className={`min-w-0 rounded-2xl border border-[#262A2E] bg-[#121315] p-4 sm:p-5 ${className}`}>
+    <section id={id} ref={ref} className={`reveal ${seen ? "in" : ""} min-w-0 rounded-2xl border border-[#262A2E] bg-[#121315] p-4 sm:p-5 ${className}`}>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h2 className={`${mono} text-xs font-semibold uppercase tracking-wider text-zinc-400`}>{title}</h2>
         {right}
@@ -83,6 +89,9 @@ export default function Home() {
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [filed, setFiled] = useState<Filed | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [logDone, setLogDone] = useState(false); // the counsel log types its last two lines once the answer is in
+  const [burst, setBurst] = useState(0); // bumps each time payroll flips to "Covered"
+  const reduceMotion = useReducedMotion();
   // Vote results we already know. The chain read can lag a few seconds behind, so never let a stale read undo them.
   const known = useRef<Map<number, { status: string; approvals: number; voters: string[] }>>(new Map());
 
@@ -147,6 +156,24 @@ export default function Home() {
     return analyze(balances, obligations);
   }, [data, obs]);
 
+  // Payroll just became "Covered" because money arrived: play the pulse + the warm chord.
+  const prevPay = useRef<{ gap: number; near: number } | null>(null);
+  useEffect(() => {
+    if (!health || !data) return;
+    const prev = prevPay.current;
+    prevPay.current = { gap: health.gapUsd, near: data.payroll.nearBalance };
+    if (prev && prev.gap > 0 && health.gapUsd === 0 && data.payroll.nearBalance > prev.near) {
+      setBurst((b) => b + 1);
+      sound.success();
+    }
+  }, [health, data]);
+
+  const live: Live | null = useMemo(() => {
+    if (!data || !health) return null;
+    const due = obs.filter((o) => +o.amountNear > 0).map((o) => o.dueInDays);
+    return { payrollUsd: data.payroll.nearBalance * data.demo.demoNearUsdPrice, reserveUsd: health.reserveUsd, daysToPayday: due.length ? Math.min(...due) : null, gapUsd: health.gapUsd };
+  }, [data, health, obs]);
+
   // Not enough spare NEAR in the reserve to cover the starting gap (counting what a reset would send back).
   const needsTopup = topupFromServer || (!!data && data.reserve.spendableNear + Math.max(0, data.payroll.nearBalance - data.demo.startingPayrollNear) + 1e-9 < data.demo.startingGapNear);
   async function resetDemo() {
@@ -164,7 +191,8 @@ export default function Home() {
         expectPayroll.current = { near: expectedNear, until: deadline() };
         setData((d) => (d ? withPayroll(d, expectedNear) : d));
       }
-      setResetMsg(j.status === "already" ? "Already at the starting point." : "Done — payroll is short again. Press “Get advice” to start.");
+      const closedMsg = j.closed ? ` ${j.closed} old suggestion${j.closed === 1 ? " was" : "s were"} closed, so nobody can approve a stale one.` : "";
+      setResetMsg(j.status === "already" ? "Already at the starting point." : `Done — payroll is short again.${closedMsg} Press “Get advice” to start.`);
       await load(); [2500, 6000].forEach((ms) => setTimeout(load, ms));
     } catch (e) { setResetMsg((e as Error).message); } finally { setBusy(null); }
   }
@@ -187,10 +215,12 @@ export default function Home() {
         why: "A note asked to send money to an address the treasury doesn't own." });
       return;
     }
-    setBusy("analyze"); setAnalysis(null);
+    setBusy("analyze"); setAnalysis(null); setLogDone(false);
     try {
       const r = await fetch("/api/analyze", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ obligations: list }) });
       const j = await r.json();
+      // On success, let the log type "Proof checked ✓ / Suggestion ready" before the advice appears.
+      if (j.status === "ok") { setLogDone(true); await new Promise((res) => setTimeout(res, reduceMotion ? 0 : 1500)); }
       setAnalysis(r.ok || j.status ? j : { status: "error", message: j.error || "Something went wrong." });
     } catch (e) {
       setAnalysis({ status: "error", message: (e as Error).message });
@@ -210,7 +240,7 @@ export default function Home() {
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.message || j.error || "Couldn't file it.");
-      setFiled(j); await load();
+      setFiled(j); sound.chime(); await load();
     } catch (e) { setNotice((e as Error).message); } finally { setBusy(null); }
   }
   async function vote(proposalId: number, member: number) {
@@ -266,7 +296,8 @@ export default function Home() {
   };
   return (
     <div className="mx-auto w-full min-w-0 max-w-6xl px-4 py-6 sm:px-5 sm:py-8">
-      <header className="mb-6 flex flex-wrap items-end justify-between gap-3 sm:mb-8">
+      <SoundToggle />
+      <header className="mb-2 flex flex-wrap items-end justify-between gap-3 pr-12 sm:mb-4">
         <div className="min-w-0">
           <h1 className="flex items-center gap-2 font-[family-name:var(--font-syne)] text-xl font-extrabold tracking-[0.3em] text-[#F2F2EE] sm:gap-3 sm:text-3xl sm:tracking-[0.45em]">
             <Logo />COINSEL
@@ -278,6 +309,9 @@ export default function Home() {
           {data && <a className="max-w-full truncate rounded-full border border-[#C6FF3D]/40 px-3 py-1 text-[#C6FF3D] hover:bg-[#C6FF3D]/10" href={data.explorerUrl} target="_blank" rel="noreferrer">{short(data.dao)} ↗</a>}
         </div>
       </header>
+
+      <Hero live={live} />
+      <Marquee />
 
       {error && (
         <div className="mb-6 rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-300">
@@ -293,7 +327,7 @@ export default function Home() {
             <span className="min-w-0 text-zinc-500">1 test NEAR is shown as {usd(calc.price)}. Amounts in NEAR, accounts and explorer links are real.</span>
           </div>
           <Card title="Total treasury" className="md:col-span-1" right={<Badge kind="real" />}>
-            <div className="text-4xl font-semibold">{usd(calc.realUsd)}</div>
+            <div className="text-4xl font-semibold"><CountUp value={calc.realUsd} format={usd} /></div>
             <p className="mt-1 text-sm text-zinc-400">{near(calc.bal)} <span className="text-[#FFC56E]">(shown at demo scale)</span></p>
             <div className="mt-3 space-y-1 text-sm text-zinc-300">
               <div className="flex justify-between"><span>Main reserve</span><span>{near(data.onChain.nearBalance)}</span></div>
@@ -353,14 +387,14 @@ export default function Home() {
             </p>
           </Card>
 
-          <Card title="Health check" className="md:col-span-3" right={<span className="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-zinc-500">Plain maths, no AI</span>}>
+          <Card id="health" title="Health check" className="md:col-span-3" right={<span className="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-zinc-500">Plain maths, no AI</span>}>
             {health && (
               <>
                 <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <Stat label="Payroll account" value={health.gapUsd > 0 ? `Short by ${usd(health.gapUsd)}` : "Covered"} tone={health.gapUsd > 0 ? "bad" : "good"} />
-                  <Stat label="Payroll money lasts" value={health.runwayDays === null ? "No payouts due" : `${health.runwayDays} days`} tone={health.shortfalls.length ? "bad" : health.runwayDays !== null && health.runwayDays < 30 ? "warn" : "good"} />
-                  <Stat label="Main reserve can spare" value={usd(health.reserveUsd)} tone={health.gapUsd > 0 && !health.reserveCoversGap ? "bad" : "neutral"} />
-                  <Stat label="Sitting unused" value={usd(health.totalIdleUsd)} tone="neutral" />
+                  <Stat burst={burst} label="Payroll account" value={health.gapUsd > 0 ? <>Short by <CountUp value={health.gapUsd} format={usd} /></> : "Covered ✓"} tone={health.gapUsd > 0 ? "bad" : "good"} />
+                  <Stat label="Payroll money lasts" value={health.runwayDays === null ? "No payouts due" : <><CountUp value={health.runwayDays} /> days</>} tone={health.shortfalls.length ? "bad" : health.runwayDays !== null && health.runwayDays < 30 ? "warn" : "good"} />
+                  <Stat label="Main reserve can spare" value={<CountUp value={health.reserveUsd} format={usd} />} tone={health.gapUsd > 0 && !health.reserveCoversGap ? "bad" : "neutral"} />
+                  <Stat label="Sitting unused" value={<CountUp value={health.totalIdleUsd} format={usd} />} tone="neutral" />
                 </div>
                 <p className="mb-3 text-xs text-zinc-500">Payouts are paid from the payroll account: it holds {near(data.payroll.nearBalance)} and {near(calc.totalDue)} is due. The main reserve tops it up when needed.</p>
                 <ul className="space-y-2">
@@ -390,7 +424,12 @@ export default function Home() {
               <button className={`${btnGhost} border-[#FFC56E]/40 text-[#FFC56E]`} disabled={busy !== null || obs.length === 0} onClick={tryTheTrick}>Try the trick</button>
               <span className="min-w-0 text-xs text-zinc-500">“Try the trick” adds a sneaky note — “{TRICK_NOTE}” — to see what Coinsel does.</span>
             </div>
-            {busy === "analyze" && <p className="mt-4 text-sm text-zinc-400">Checking the AI is really private first, then writing your advice. This takes about 15 seconds.</p>}
+            {busy === "analyze" && (
+              <>
+                <CounselLog done={logDone} readLines={["Reading your treasury…", !health || !live ? "Checking your payouts…" : live.daysToPayday === null ? "No payouts are due" : health.gapUsd > 0 ? `Payday in ${live.daysToPayday} day${live.daysToPayday === 1 ? "" : "s"}, short ${usd(health.gapUsd)}` : `Payday in ${live.daysToPayday} day${live.daysToPayday === 1 ? "" : "s"}, the money is there`, "Thinking privately…"]} />
+                <p className="mt-2 text-xs text-zinc-500">We check the AI is really private first, then write your advice. About 15 seconds.</p>
+              </>
+            )}
 
             {a?.status === "blocked" && (
               <div className="mt-4 rounded-xl border border-[#FF9A82]/40 bg-[#FF9A82]/10 p-4" role="alert">
@@ -422,7 +461,7 @@ export default function Home() {
             {a?.status === "ok" && (
               <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-5">
                 <div className="min-w-0 lg:col-span-3">
-                  <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                  <div className="float rounded-xl border border-white/10 bg-black/20 p-4">
                     <div className="mb-2 flex items-center gap-2 text-xs text-zinc-500"><span className={mono}>ADVICE</span><Badge kind="real">Written by private AI</Badge></div>
                     <p className="break-words text-[15px] leading-relaxed text-zinc-100">{a.advice.text}</p>
                   </div>
@@ -434,7 +473,7 @@ export default function Home() {
                     {!filed && a.transferNear > 0 && <button className={`${btn} mt-3`} disabled={busy !== null || !a.canAfford} onClick={() => fileIt(a)}>{busy === "file" ? "Filing…" : "File step 1 for the council"}</button>}
                     {a.transferNear > 0 && !a.canAfford && <p className="mt-2 text-xs text-[#FFC56E]">Demo needs a top-up: the main reserve can only spare {near(a.spendableNear)} (the rest pays for storage), but the gap is {near(a.transferNear)}.</p>}
                     {filed && (
-                      <p className="mt-3 text-zinc-200">Filed as suggestion <b>#{filed.proposalId}</b>. <a className="text-[#C6FF3D] underline" href={filed.txUrl} target="_blank" rel="noreferrer">See it on the explorer ↗</a><br /><span className="text-xs text-zinc-500">Now the council votes — see “Suggestions” below.</span></p>
+                      <p className="float float-b mt-3 text-zinc-200">Filed as suggestion <b>#{filed.proposalId}</b>. <a className="text-[#C6FF3D] underline" href={filed.txUrl} target="_blank" rel="noreferrer">See it on the explorer ↗</a><br /><span className="text-xs text-zinc-500">Now the council votes — see “Suggestions” below.</span></p>
                     )}
                   </div>
                   <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-4 text-sm">
@@ -467,6 +506,7 @@ export default function Home() {
           </Card>
         </div>
       )}
+      <Safety />
       {data && calc && (
         <section className="mt-5 min-w-0 rounded-2xl border border-dashed border-[#FFC56E]/40 bg-[#121315] p-4 sm:p-5">
           <div className="mb-2 flex flex-wrap items-center gap-2"><h2 className={`${mono} text-xs font-semibold uppercase tracking-wider text-zinc-400`}>Demo controls</h2><Badge kind="demo">Demo only</Badge></div>
