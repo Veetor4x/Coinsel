@@ -11,8 +11,25 @@ DAO treasuries are watched by hand. Someone has to notice that payroll is due so
 - **Watches the treasury.** Reads real balances of a Sputnik DAO and its payroll account on NEAR testnet, plus upcoming payouts.
 - **Spots shortfalls.** A plain code engine (not AI, unit-tested) works out the gap, the runway in days and idle money.
 - **Gives private advice, with proof.** NEAR AI Cloud (TEE) writes the explanation. Coinsel checks the hardware attestation first and shows 8 checks. If they fail, nothing is sent.
-- **Files a proposal.** An agent account whose only key can call `add_proposal` creates a real Sputnik proposal, including a NEAR Intents price quote for the cross-chain step.
+- **Files a proposal.** An agent account whose only key can call `add_proposal` creates a real Sputnik proposal. Step 2 can be a real test swap on NEAR Intents testnet (Tidepool), or a price quote if that is switched off or down.
 - **The council votes.** 2 of 3 council members approve and the transfer runs on-chain.
+
+## How it works
+1. **Read.** The server reads the DAO, its payroll account and the open proposals from NEAR testnet. A code engine (not AI) finds the gap.
+2. **Advise.** Private AI (checked first, fail-closed) explains a two-step plan in plain English.
+3. **Step 1: top up payroll (NEAR testnet, council votes).** The agent files a Sputnik `Transfer` proposal: main reserve → payroll account, both DAO-owned.
+4. **Step 2: refill the reserve (real test swap, council votes).** Only when `TIDEPOOL_SWAP_ENABLED=true`:
+   - **What it swaps:** test USDC the DAO already holds → test wNEAR, on **NEAR Intents testnet (Tidepool, community sandbox)**. The output lands back in the DAO (main reserve). The amount is a small fixed test amount (`tidepool.swapUsdc` in `config/demo-treasury.json`, default 10), not the demo-scale gap. Tokens have no value.
+   - **Quoted.** The screen shows a price-only quote (`POST /v0/quote`, `dry: true`).
+   - **Filed.** Pressing **File step 2** asks Tidepool for a fresh real quote (good for ~30 minutes, re-requested once if it would expire in under 10). The quote gives a one-time deposit address, with the DAO as both the output recipient and the refund address. The agent then files one Sputnik `FunctionCall` proposal on the test-USDC contract with two actions: `storage_deposit` (registers that address, 0.00125 NEAR from the DAO) and `ft_transfer` (sends the USDC to it).
+   - **Approved.** 2 of 3 council members approve. The DAO itself sends the USDC. The agent never touches the money and holds no Tidepool wallet. We do **not** use Tidepool's `/v1` agent wallets.
+   - **Swapping → Done / Refunded / Failed.** The page polls Tidepool (`GET /v0/status`) and shows the result and explorer links. If the quote expired or the swap fails, Tidepool refunds the USDC to the DAO. If the council votes after the quote expired, demo voting refuses to sign and the page offers a fresh quote.
+   - **Guard.** The guard only allows this one exact proposal shape, and only if Tidepool itself says both the output and the refund go to the DAO (`checkSwapDeposit` in `lib/guard.ts`).
+   - **Fallback.** If Tidepool is off or not answering, Step 2 shows the old real-price mainnet quote, labelled "Quote only".
+5. **Reset demo** also closes any open Step 2 suggestion. It cannot undo a swap that already ran (the test USDC is spent, the test wNEAR stays in the DAO).
+
+### One-time setup for the real test swap
+Needs ~10 test USDC in the DAO and the DAO registered on the two Tidepool token contracts. Steps: [docs/STEP2-TESTNET-SWAP.md](docs/STEP2-TESTNET-SWAP.md).
 
 ## Try it in 2 minutes (hosted)
 1. Open https://coinsel-jet.vercel.app → **see** a red "Payroll account — Short by $3,000" alert.
@@ -36,7 +53,8 @@ If a step says "Couldn't verify this time", press **Try again**. Coinsel never s
 | Function-call access keys | `scripts/add-agent-key.ts` creates the key; `lib/chain-write.ts` signs `add_proposal` with it |
 | NEAR AI Cloud (TEE, private inference) | `lib/ai.ts` (OpenAI-compatible chat calls) and `app/api/analyze/route.ts` (verify, then ask) |
 | Attestation verification | `lib/attestation.ts`: fresh nonce, Intel TDX quote (`@phala/dcap-qvl`), signer binding, compose-hash and RTMR3 replay, NVIDIA NRAS GPU verdict, gateway report, answer-signature check. Not included: TLS binding, image provenance |
-| NEAR Intents 1Click API | `lib/intents.ts`: `POST /v0/quote` with `dry: true` (no money moves) |
+| NEAR Intents 1Click API (mainnet, price only) | `lib/intents.ts`: `POST /v0/quote` with `dry: true` (no money moves). Fallback "quote only" card |
+| NEAR Intents testnet via **Tidepool** (community sandbox, 1Click-compatible `/v0`) | `lib/tidepool.ts` (quote, status), `lib/swap-proposal.ts` (the exact `FunctionCall` proposal), `app/api/propose-swap`, `app/api/swap-status`, `app/SwapStep.tsx` |
 | NEAR testnet RPC | `lib/near.ts` (plain JSON-RPC `fetch`, default `https://rpc.testnet.fastnear.com`) |
 | near-api-js | `lib/chain-write.ts` and `scripts/` |
 
@@ -48,12 +66,14 @@ NEAR Wallet Selector is not used. Council votes in the demo are signed server-si
 | Sputnik DAO, proposals, votes, transfers | **Real**, on NEAR testnet |
 | Balances of the DAO and payroll account | **Real**, read from testnet |
 | TEE attestation and signed AI answer | **Real**, from NEAR AI Cloud |
-| NEAR Intents quote | **Real price quote**, dry run, no money moved. NEAR Intents has no testnet. The receiving address is a placeholder |
+| NEAR Intents (mainnet) quote | **Real price quote**, dry run, no money moved. Used only as the fallback. The receiving address is a placeholder |
+| Step 2 swap (when `TIDEPOOL_SWAP_ENABLED=true`) | **Real transactions on NEAR testnet** with **test tokens that have no value**, through Tidepool, a community-run sandbox (not run by NEAR; it is the only market maker). It swaps a small test amount of test USDC for test wNEAR, not the $-scale demo gap |
 | Dollar amounts | **Demo scale**: 1 test NEAR is shown as $1,000. NEAR amounts, accounts and links are real |
 | Ethereum USDC balance ($40,000 idle) | **Demo data** (`config/demo-treasury.json`) |
 | Payout list (payroll and one grant) | **Demo data** (`config/demo-treasury.json`) |
 | Council voting buttons | **Demo mode**: the server signs with testnet council keys. Real use would have each member sign with their own wallet |
-| Step 2 of the plan (refill reserve from USDC) | **Quote only**, never executed |
+| Ethereum "idle USDC" in Step 2 | **Not used for the real swap** (the DAO can't hold Ethereum coins). The real swap uses test USDC held by the DAO on NEAR testnet. With the swap switched off, Step 2 is **quote only** |
+| Test wNEAR received | A **test token**, not the DAO's native NEAR. It is shown in Step 2, not added to the NEAR balance or the health numbers |
 
 Nothing uses mainnet funds.
 
@@ -63,7 +83,9 @@ Browser ──► Next.js app (App Router)
               ├─ /api/treasury ─► NEAR testnet RPC ─► DAO + payroll balances, policy, proposals
               ├─ /api/analyze  ─► guard (notes) ─► health engine (code) ─► 1Click dry quote
               │                  ─► NEAR AI Cloud: verify attestation (fresh nonce) ─► advice ─► verify answer signature
-              ├─ /api/propose  ─► agent account (add_proposal only) ─► Sputnik DAO proposal
+              ├─ /api/propose  ─► agent account (add_proposal only) ─► Sputnik DAO proposal (step 1)
+              ├─ /api/propose-swap ─► Tidepool live quote ─► guard ─► agent (add_proposal only) ─► Sputnik proposal (step 2)
+              ├─ /api/swap-status  ─► DAO proposal + Tidepool status ─► Quoted/Filed/Approved/Swapping/Done
               ├─ /api/demo-vote ─► testnet council keys (DEMO_MODE) ─► 2 of 3 approve ─► DAO executes the transfer
               └─ /api/reset-demo ─► payroll account sends its surplus back to the DAO (DEMO_MODE)
 No database. Nothing is stored server-side.
@@ -90,6 +112,8 @@ Both `npm test` and `npm run build` work with no secrets. Without keys the page 
 | `PAYROLL_PRIVATE_KEY` | Testnet payroll key, used only by **Reset demo** |
 | `NEARAI_API_KEY`, `NEARAI_BASE_URL`, `NEARAI_MODEL` | NEAR AI Cloud (default model `deepseek-ai/DeepSeek-V4.1-Flash-1017`) |
 | `ONECLICK_API_URL`, `ONECLICK_JWT` | NEAR Intents 1Click (the JWT is optional) |
+| `TIDEPOOL_SWAP_ENABLED` | `true` turns on the real Step 2 test swap. Default off (Step 2 stays quote-only) |
+| `TIDEPOOL_API_URL`, `TIDEPOOL_API_KEY` | Optional. Tidepool base URL (default `https://www.usetidepool.tech`) and an optional key (any value works; it only lowers the fee tier). Server-side only |
 | `DEMO_MODE` | `true` turns on server-signed council votes and Reset |
 | `FUNDER_ACCOUNT_ID`, `FUNDER_PRIVATE_KEY` | Setup scripts only |
 
@@ -101,6 +125,7 @@ npm run setup:accounts   # makes 3 council accounts + 1 agent; prints a funder a
 npm run setup:dao        # Sputnik DAO: 2-of-3 council, agent may only add proposals, bond 0
 npm run setup:agent-key  # gives the agent its single add_proposal-only key, removes the setup key
 npm run setup:payroll    # DAO-owned payroll account (needs FUNDER_* and DAO_ACCOUNT_ID in env)
+npm run setup:tidepool   # optional: registers the DAO on the Tidepool test tokens (real Step 2 swap); add --check to only look
 npm run setup:check      # prints the live policy so you can confirm it
 ```
 Keys are written to `.secrets/` (git-ignored) and never printed in full. Copy them into your environment variables. Then edit `config/demo-treasury.json` (`daoOwnedAccounts`, `payrollAccountId`) to match your accounts. The DAO needs about 10 NEAR and the payroll account about 8 NEAR at the start; about 5.5 NEAR of the DAO is locked for contract storage.

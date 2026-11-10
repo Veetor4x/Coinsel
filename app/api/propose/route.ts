@@ -12,6 +12,8 @@ import { buildDescription } from "@/lib/proposal-text";
 import { fileTransferProposal } from "@/lib/chain-write";
 import { explorerAccountUrl } from "@/lib/near";
 import { env } from "@/lib/env";
+import { requestQuote, tidepoolEnabled } from "@/lib/tidepool";
+import { STEP2_POINTER } from "@/lib/proposal-text";
 
 export const maxDuration = 60;
 const HEX = /^[0-9a-f]{64}$/;
@@ -40,9 +42,12 @@ export async function POST(req: Request) {
     if (amountNear > spend + 1e-9) return NextResponse.json({ error: `The main reserve can only spare ${spend.toFixed(2)} NEAR but the gap is ${amountNear} NEAR. Top it up from the test faucet, then try again.` }, { status: 409 });
     // Step 2 is sized from the same gap (never from the browser), so every number agrees.
     const quote = await getDryQuote(usdcToQuote(health.gapUsd));
+    // If the real test swap is on AND reachable, Step 2 is its own suggestion; otherwise the text stays "quote only".
+    const realStep2 = tidepoolEnabled() && (await requestQuote({ dao, usdc: demo.tidepool.swapUsdc, live: false }).then(() => true, () => false));
     const description = buildDescription({
       advice: text, amountNear, amountUsd: amountNear * demo.demoNearUsdPrice, receiver: demo.payrollAccountId, quote,
       model: String(b.advice.model ?? "").slice(0, 80), responseHash: b.advice.responseHash, attestationHash: b.attestationHash,
+      step2Override: realStep2 ? STEP2_POINTER : undefined,
     });
     const { proposalId, txHash } = await fileTransferProposal({ dao, receiver: demo.payrollAccountId, amountNear, description });
     return NextResponse.json({

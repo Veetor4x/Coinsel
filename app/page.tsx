@@ -14,10 +14,11 @@ import { Burst, CounselLog, SoundToggle } from "./Extras";
 import { ThemeToggle } from "./ThemeToggle";
 import { CountUp, useInView, useReducedMotion } from "./motion";
 import { sound } from "@/lib/sound";
+import { SwapStep, type SwapPreview } from "./SwapStep";
 
 type Data = Omit<Treasury, "proposals"> & { proposals: (Treasury["proposals"][number])[] };
 type Ok = {
-  status: "ok"; health: HealthReport; quote: QuoteResult; quoteUsdc: number; attestation: AttestationView; attestationHash: string;
+  status: "ok"; health: HealthReport; quote: QuoteResult; quoteUsdc: number; swap?: SwapPreview; attestation: AttestationView; attestationHash: string;
   advice: { text: string; model: string; responseHash: string; requestHash: string }; transferNear: number; transferUsd: number; payrollAccount: string; canAfford: boolean; spendableNear: number;
 };
 type Analysis =
@@ -91,6 +92,7 @@ export default function Home() {
   const [filed, setFiled] = useState<Filed | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [logDone, setLogDone] = useState(false); // the counsel log types its last two lines once the answer is in
+  const [swapKey, setSwapKey] = useState(0); // bumps on Reset so the Step 2 tracker starts clean
   const [burst, setBurst] = useState(0); // bumps each time payroll flips to "Covered"
   const reduceMotion = useReducedMotion();
   // Vote results we already know. The chain read can lag a few seconds behind, so never let a stale read undo them.
@@ -185,7 +187,7 @@ export default function Home() {
       if (j.status === "needs-topup") { setTopupFromServer(true); setResetMsg(j.why); return; }
       if (j.status === "busy" || j.status === "error") { setResetMsg(j.message); return; }
       // Back to the starting story: default payouts, no old advice.
-      known.current.clear(); setAnalysis(null); setFiled(null);
+      known.current.clear(); setAnalysis(null); setFiled(null); setSwapKey((k) => k + 1);
       if (data) setObs(data.demo.obligations);
       if (data && j.movedNear) {
         const expectedNear = data.demo.startingPayrollNear; // reset always lands on the known starting amount
@@ -262,7 +264,7 @@ export default function Home() {
         const n = { ...d, proposals: d.proposals.map((x) => (x.id === proposalId ? applyKnown(x) : x)) };
         return moved ? withPayroll(n, expectedNear) : n;
       });
-      setNotice(j.executed ? "Approved by 2 of 3 — the transfer ran on the test network. Balances below are now updated." : `Council ${member} approved. ${j.approvals} of ${data?.council.threshold ?? 2} so far.`);
+      setNotice(j.executed ? (prev?.swap ? "Approved by 2 of 3 — the test USDC was sent to the swap. Watch Step 2 for the result." : "Approved by 2 of 3 — the transfer ran on the test network. Balances below are now updated.") : `Council ${member} approved. ${j.approvals} of ${data?.council.threshold ?? 2} so far.`);
       await load();
       if (j.executed) [2500, 7000].forEach((ms) => setTimeout(load, ms)); // balances can lag a few seconds
     } catch (e) { setNotice((e as Error).message); } finally { setBusy(null); }
@@ -277,10 +279,10 @@ export default function Home() {
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
           <span className="min-w-0 break-words">#{p.id} · {firstLine.replace(/^What: /, "")}</span>
           <span className={`${mono} text-xs ${p.status === "Approved" ? "text-accent" : p.status === "InProgress" ? "text-demo" : "text-zinc-400"}`}>
-            {p.status === "InProgress" ? `Waiting for votes · ${p.approvals} of ${data.council.threshold}` : p.status === "Approved" ? "Approved — money moved" : p.status}
+            {p.status === "InProgress" ? `Waiting for votes · ${p.approvals} of ${data.council.threshold}` : p.status === "Approved" ? (p.swap ? "Approved — see Step 2" : "Approved — money moved") : p.status}
           </span>
         </div>
-        {p.status === "InProgress" && data.demoMode && p.kind === "Transfer" && (
+        {p.status === "InProgress" && data.demoMode && (p.kind === "Transfer" || !!p.swap) && (
           <div className="mt-2">
             <div className="flex flex-wrap gap-2">
               {data.demoCouncil.map((m) => {
@@ -478,14 +480,8 @@ export default function Home() {
                       <p className="float float-b mt-3 text-zinc-200">Filed as suggestion <b>#{filed.proposalId}</b>. <a className="text-accent underline" href={filed.txUrl} target="_blank" rel="noreferrer">See it on the explorer ↗</a><br /><span className="text-xs text-zinc-500">Now the council votes — see “Suggestions” below.</span></p>
                     )}
                   </div>
-                  <div className="mt-3 rounded-xl border border-line/10 bg-sunk p-4 text-sm">
-                    <div className="mb-1 flex flex-wrap items-center gap-2"><span className="font-semibold">Step 2 · Later, on another network</span><Badge kind="demo">Quote only</Badge></div>
-                    <p className="mb-1 text-zinc-400">Refill the main reserve from the idle USDC on Ethereum.</p>
-                    {a.quote.ok ? (
-                      <p className="text-zinc-300">{a.quote.amountInUsdc.toLocaleString("en-US")} USDC on Ethereum would become about <b>{usd(a.quote.amountOutUsd)}</b> of NEAR in about {a.quote.timeEstimateSec} seconds.</p>
-                    ) : <p className="text-demo">{a.quote.error}</p>}
-                    <p className="mt-1 text-xs text-zinc-500">{a.quote.label}</p>
-                  </div>
+                  <SwapStep swap={a.swap} quote={a.quote} advice={a.advice} attestationHash={a.attestationHash} obligations={obs}
+                    key={swapKey} proposals={data.proposals} busyElsewhere={busy !== null} onChanged={load} />
                 </div>
                 <div className="min-w-0 lg:col-span-2"><VerifiedPanel a={a.attestation} hashes={{ request: a.advice.requestHash, response: a.advice.responseHash }} /></div>
               </div>

@@ -78,5 +78,21 @@
     }
   ],
   "demoScaleLabel": "Demo scale \u2014 testnet amounts shown at real-world size",
-  "startingGapNear": 3
+  "startingGapNear": 3,
+  "tidepool": {
+    "_note": "REAL testnet swap through Tidepool, a community-run NEAR Intents sandbox (not run by NEAR). Tokens are test tokens with no value. The DAO sends test USDC to a one-time deposit address; Tidepool pays test wNEAR back to the DAO. Small fixed amount, not the demo-scale gap.",
+    "label": "NEAR Intents testnet (Tidepool, community sandbox)",
+    "originContract": "usdc.tidepool-sandbox.testnet",
+    "originAsset": "nep141:usdc.tidepool-sandbox.testnet",
+    "originLabel": "test USDC",
+    "destinationContract": "wnear.tidepool-sandbox.testnet",
+    "destinationAsset": "nep141:wnear.tidepool-sandbox.testnet",
+    "destinationLabel": "test wNEAR",
+    "originDecimals": 6,
+    "destinationDecimals": 24,
+    "swapUsdc": 10,
+    "maxUsdc": 25,
+    "quoteMinutes": 30,
+    "minQuoteMinutesLeft": 10
+  }
 }

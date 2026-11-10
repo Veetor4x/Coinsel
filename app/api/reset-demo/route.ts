@@ -27,9 +27,9 @@ export async function POST() {
   try {
     const t = await loadTreasury();
     // First close old pending suggestions (demo council votes Reject), so nobody can approve a stale one later.
-    // Only plain transfers that the Coinsel agent filed are touched.
+    // Only plain transfers and Step 2 swap suggestions that the Coinsel agent filed are touched.
     const agents = (await getCouncil(dao)).agent;
-    const open = t.proposals.filter((p) => p.status === "InProgress" && p.kind === "Transfer" && agents.includes(p.proposer)).map((p) => p.id).slice(0, 4);
+    const open = t.proposals.filter((p) => p.status === "InProgress" && (p.kind === "Transfer" || (p.kind === "FunctionCall" && !!p.swap)) && agents.includes(p.proposer)).map((p) => p.id).slice(0, 6);
     const closedCount = open.length ? await closeOpenSuggestions(dao, open) : 0;
     const plan = planReset({ payrollNear: t.payroll.nearBalance, startNear: startingPayrollNear(), reserveSpendableNear: t.reserve.spendableNear, gapNear: demo.startingGapNear });
     if (plan.action === "needs-topup") return NextResponse.json({ status: "needs-topup", message: "Demo needs a top-up", why: plan.reason }, { status: 409 });

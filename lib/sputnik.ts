@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- chain/attestation JSON is untyped; every field is checked before use */
 // Read-only Sputnik DAO v2 helpers.
 import { viewAccount, viewFunction, yoctoToNear } from "./near";
+import { parseSwapKind, type ParsedSwap } from "./swap-proposal";
 
 type RawPolicy = {
   roles: { name: string; kind: { Group?: string[] } | string; permissions: string[] }[];
@@ -29,6 +30,8 @@ export type ProposalSummary = {
   id: number; proposer: string; description: string; kind: string; status: string; submissionTime: string;
   /** For Transfer proposals. */
   receiver?: string; amountNear?: number;
+  /** Set only when the proposal is exactly a Coinsel Step 2 swap deposit (see lib/swap-proposal.ts). */
+  swap?: ParsedSwap;
   approvals: number; voters: string[];
 };
 
@@ -45,6 +48,7 @@ function summarize(p: any): ProposalSummary {
     submissionTime: String(Math.floor(Number(BigInt(p.submission_time) / 1_000_000n))),
     receiver: t && !t.token_id ? t.receiver_id : undefined,
     amountNear: t && !t.token_id ? yoctoToNear(t.amount) : undefined,
+    swap: kindName === "FunctionCall" ? parseSwapKind(p.kind) ?? undefined : undefined,
     approvals: Object.values(votes).filter((v) => v === "Approve").length,
     voters: Object.keys(votes),
   };

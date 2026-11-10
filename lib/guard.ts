@@ -2,6 +2,7 @@
 // Obligation notes and AI text are UNTRUSTED: we scan them and refuse anything that points outside.
 import demo from "@/config/demo-treasury.json";
 import { env } from "./env";
+import type { ParsedSwap } from "./swap-proposal";
 
 const NEAR_ID = /\b(?:[a-z0-9]+(?:[-_][a-z0-9]+)*\.)+(?:testnet|near)\b/gi;
 const IMPLICIT = /\b[0-9a-f]{64}\b/gi;
@@ -45,5 +46,26 @@ export function checkObligations(obs: { label: string; note?: string }[], owned:
     const r = checkText(`${o.note ?? ""}`, owned);
     if (!r.ok) return { ...r, label: o.label };
   }
+  return { ok: true };
+}
+
+export const SWAP_BLOCKED_MESSAGE =
+  "Blocked: this swap doesn't pay back to the treasury, so Coinsel won't touch it. And Coinsel can't send money anyway — it can only suggest.";
+
+/**
+ * Step 2 sends test USDC to a Tidepool deposit address (not a DAO-owned account). That is only allowed when
+ * the swap behind that address is exactly what Coinsel asked for: right token, small amount, and BOTH the
+ * swap output and any refund go to the DAO. `swap` comes from the proposal; `status` comes from Tidepool.
+ */
+export function checkSwapDeposit(
+  a: { swap: ParsedSwap; dao: string; maxBase: bigint; originContract: string; originAsset: string; destinationAsset: string },
+  status: { request: { recipient?: string; refundTo?: string; originAsset?: string; destinationAsset?: string; amountIn?: string } },
+): GuardResult {
+  const r = status.request;
+  const fail = (what: string): GuardResult => ({ ok: false, message: SWAP_BLOCKED_MESSAGE, outside: [what] });
+  if (a.swap.tokenContract !== a.originContract) return fail(a.swap.tokenContract);
+  if (!/^[1-9][0-9]*$/.test(a.swap.amountBase) || BigInt(a.swap.amountBase) > a.maxBase) return fail("amount too large");
+  if (r.originAsset !== a.originAsset || r.destinationAsset !== a.destinationAsset || r.amountIn !== a.swap.amountBase) return fail("different swap");
+  if (!r.recipient || !isDaoOwned(r.recipient, [a.dao.toLowerCase()]) || !r.refundTo || !isDaoOwned(r.refundTo, [a.dao.toLowerCase()])) return fail(String(r.recipient ?? r.refundTo ?? "unknown"));
   return { ok: true };
 }
