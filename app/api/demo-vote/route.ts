@@ -1,7 +1,7 @@
 // DEMO MODE ONLY: the demo server signs a council vote with a testnet council key.
 // In real use each council member signs with their own wallet.
 import { NextResponse } from "next/server";
-import { checkDestination, checkSwapDeposit } from "@/lib/guard";
+import { checkDestination, checkRegistration, checkSwapDeposit } from "@/lib/guard";
 import { getProposal, getCouncil } from "@/lib/sputnik";
 import { approveAsCouncil, demoCouncil, settledProposal } from "@/lib/chain-write";
 import { env, isDemoMode } from "@/lib/env";
@@ -27,8 +27,11 @@ export async function POST(req: Request) {
     //  - a Coinsel Step 2 swap whose Tidepool quote pays back to the DAO (checked below, with a quote that has not expired).
     const council = await getCouncil(dao);
     const isSwap = !!p.swap && p.kind === "FunctionCall" && tidepoolEnabled() && council.agent.includes(p.proposer);
+    // Setup: registering the DAO itself on one of the two Tidepool token contracts (exact shape only).
+    const isRegister = !!p.register && p.kind === "FunctionCall" && tidepoolEnabled() && council.agent.includes(p.proposer)
+      && checkRegistration(p.register, dao, [demo.tidepool.originContract, demo.tidepool.destinationContract]).ok;
     const isOwnTransfer = p.kind === "Transfer" && !!p.receiver && checkDestination(p.receiver).ok;
-    if (!isSwap && !isOwnTransfer) return NextResponse.json({ error: "Demo voting only approves transfers to the DAO's own accounts, or Coinsel's own test swap." }, { status: 403 });
+    if (!isSwap && !isRegister && !isOwnTransfer) return NextResponse.json({ error: "Demo voting only approves transfers to the DAO's own accounts, Coinsel's own test swap, or its one-time setup." }, { status: 403 });
     if (isSwap && p.status === "InProgress") {
       const T = demo.tidepool;
       const st = await getSwapStatus(p.swap!.depositAddress).catch(() => null);
@@ -43,7 +46,7 @@ export async function POST(req: Request) {
     if (p.voters.includes(member.accountId)) return NextResponse.json({ error: "Council member " + n + " already voted on this one." }, { status: 409 });
     if (!council.members.includes(member.accountId)) return NextResponse.json({ error: "That demo account isn't on the council." }, { status: 403 });
 
-    const { txHash } = await approveAsCouncil(dao, id, member, isSwap ? SWAP_VOTE_TGAS : undefined);
+    const { txHash } = await approveAsCouncil(dao, id, member, isSwap || isRegister ? SWAP_VOTE_TGAS : undefined);
     const after = await settledProposal(dao, id);
     return NextResponse.json({ status: after.status, approvals: after.approvals, member: n, txHash, txUrl: `https://testnet.nearblocks.io/txns/${txHash}`, executed: after.status === "Approved" });
   } catch (e) {

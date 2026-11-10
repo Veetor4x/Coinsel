@@ -16,7 +16,7 @@ type Status = {
   approvals: number; depositAddress: string; links: { depositAddress: string; txs: string[] };
 };
 type Phase = "filed" | "approved" | "swapping" | "done" | "refunded" | "failed" | "expired" | "rejected";
-type Proposal = { id: number; status: string; swap?: unknown };
+type Proposal = { id: number; status: string; swap?: unknown; register?: unknown };
 
 const STEPS = ["Quoted", "Filed", "Approved", "Swapping", "Done"] as const;
 const AT: Record<Phase | "quoted", number> = { quoted: 0, filed: 1, approved: 2, swapping: 3, done: 4, refunded: 4, failed: 4, expired: 1, rejected: 1 };
@@ -58,8 +58,8 @@ function Stepper({ at, phase }: { at: number; phase: Phase | null }) {
   );
 }
 
-export function SwapStep({ swap, quote, advice, attestationHash, obligations, proposals, busyElsewhere, onChanged }: {
-  swap?: SwapPreview; quote: QuoteResult; advice: { text: string; model: string; responseHash: string }; attestationHash: string;
+export function SwapStep({ dao, swap, quote, advice, attestationHash, obligations, proposals, busyElsewhere, onChanged }: {
+  dao: string; swap?: SwapPreview; quote: QuoteResult; advice: { text: string; model: string; responseHash: string }; attestationHash: string;
   obligations: unknown[]; proposals: Proposal[]; busyElsewhere: boolean; onChanged: () => void;
 }) {
   // `filedHere` = filed in this page session. Otherwise we pick a swap still in flight back up from the DAO (stateless: no database).
@@ -70,6 +70,15 @@ export function SwapStep({ swap, quote, advice, attestationHash, obligations, pr
   const [error, setError] = useState<string | null>(null);
   const [filedQuote, setFiledQuote] = useState<TidepoolQuote | null>(null);
   const lastPhase = useRef<string | null>(null);
+  // What the treasury holds / whether it is registered. Starts from the analysis; refreshed while we wait for setup or coins.
+  const [fresh, setFresh] = useState<SwapReadiness | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const ready = fresh ?? (swap?.enabled ? swap.readiness : null);
+  const need = swap?.enabled ? swap.swapUsdc : 10;
+  const unregistered = !!ready && (!ready.usdcRegistered || !ready.wnearRegistered);
+  const waitingForCoins = !!ready && !unregistered && ready.daoUsdc < need;
+  const setupOpen = proposals.filter((x) => x.register && x.status === "InProgress");
+  const setupApproved = proposals.some((x) => x.register && x.status === "Approved");
 
   const inFlight = proposals.find((x) => x.swap && (x.status === "InProgress" || x.status === "Approved"))?.id ?? null;
   const tracked = filedHere ?? inFlight;
@@ -90,6 +99,25 @@ export function SwapStep({ swap, quote, advice, attestationHash, obligations, pr
     const t = setInterval(() => poll(tracked), 4000);
     return () => { clearTimeout(first); clearInterval(t); };
   }, [tracked, status?.proposalId, status?.final, poll]);
+
+  const refresh = useCallback(async () => {
+    try { const r = await fetch("/api/swap-readiness", { cache: "no-store" }); if (r.ok) setFresh(await r.json()); } catch { /* try again next tick */ }
+  }, []);
+  useEffect(() => {
+    if (!unregistered && !waitingForCoins) return;
+    const t = setInterval(refresh, 6000);
+    return () => clearInterval(t);
+  }, [unregistered, waitingForCoins, refresh]);
+
+  async function prepare() {
+    setPreparing(true); setError(null);
+    try {
+      const r = await fetch("/api/propose-register", { method: "POST" });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "Couldn't file the setup suggestions.");
+      onChanged(); refresh();
+    } catch (e) { setError((e as Error).message); } finally { setPreparing(false); }
+  }
 
   async function file() {
     setFiling(true); setError(null);
@@ -114,7 +142,7 @@ export function SwapStep({ swap, quote, advice, attestationHash, obligations, pr
 
   // ---- Real test swap ----
   const q = filedQuote ?? swap.quote;
-  const missing = swap.readiness?.missing ?? [];
+  const canFile = !!ready && !unregistered && !waitingForCoins;
   const cur = status && status.proposalId === tracked ? status : null; // ignore a leftover answer about another suggestion
   const showTracker = tracked !== null && !(restored && cur?.final);
   const phase = showTracker ? cur?.phase ?? null : null;
@@ -135,8 +163,26 @@ export function SwapStep({ swap, quote, advice, attestationHash, obligations, pr
 
       {!showTracker && (
         <>
-          {missing.map((m) => <p key={m} className="mb-2 text-xs text-demo">{m}</p>)}
-          <button className={btn} disabled={filing || busyElsewhere || missing.length > 0} onClick={file}>{filing ? "Getting a fresh quote and filing…" : "File step 2 for the council"}</button>
+          {unregistered && (
+            <div className="mb-3 rounded-lg border border-demo/40 bg-demo/10 p-3 text-xs text-demo">
+              <p className="font-semibold">One-time setup needed</p>
+              <p className="mt-1">The treasury must be registered on the test coins before it can hold or receive them (a 0.00125 NEAR fee each, paid by the treasury, approved by the council like Step 1).</p>
+              {setupOpen.length > 0 ? (
+                <p className="mt-2 text-zinc-200">Waiting for the council: approve {setupOpen.map((x) => `#${x.id}`).join(" and ")} in “Suggestions” below, as Council 1 and Council 2.</p>
+              ) : setupApproved ? (
+                <p className="mt-2 text-zinc-200">Approved. Waiting for the network to catch up… (if this stays over a minute, press “Get advice” again).</p>
+              ) : (
+                <button className={`${btn} mt-2`} disabled={preparing || busyElsewhere} onClick={prepare}>{preparing ? "Filing setup…" : "Prepare treasury for testnet swaps"}</button>
+              )}
+            </div>
+          )}
+          {waitingForCoins && ready && (
+            <div className="mb-3 rounded-lg border border-accent/30 bg-accent/5 p-3 text-xs text-zinc-200">
+              <p className="font-semibold text-accent">Ready, waiting for test USDC</p>
+              <p className="mt-1">The treasury has {fmt(ready.daoUsdc)} of the {need} test USDC it needs. Claim test coins at app.usetidepool.tech/faucet (NEAR tab) for <span className="break-all font-[family-name:var(--font-mono-jb)]">{dao}</span>, or send them from your wallet. This updates by itself.</p>
+            </div>
+          )}
+          <button className={btn} disabled={filing || busyElsewhere || !canFile} onClick={file}>{filing ? "Getting a fresh quote and filing…" : "File step 2 for the council"}</button>
           <p className="mt-2 text-xs text-zinc-500">Quoted {new Date(swap.quote.quotedAt).toLocaleTimeString()}. A fresh quote is requested when you file, and it is good for about 30 minutes.</p>
         </>
       )}

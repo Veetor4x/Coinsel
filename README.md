@@ -29,7 +29,7 @@ DAO treasuries are watched by hand. Someone has to notice that payroll is due so
 5. **Reset demo** also closes any open Step 2 suggestion. It cannot undo a swap that already ran (the test USDC is spent, the test wNEAR stays in the DAO).
 
 ### One-time setup for the real test swap
-Needs ~10 test USDC in the DAO and the DAO registered on the two Tidepool token contracts. Steps: [docs/STEP2-TESTNET-SWAP.md](docs/STEP2-TESTNET-SWAP.md).
+Needs the DAO registered on the two Tidepool token contracts and ~10 test USDC in it. The app does the registration for you: **Prepare treasury for testnet swaps** files two council-approved setup suggestions (exact `storage_deposit` calls only). Steps: [docs/STEP2-TESTNET-SWAP.md](docs/STEP2-TESTNET-SWAP.md).
 
 ## Try it in 2 minutes (hosted)
 1. Open https://coinsel-jet.vercel.app → **see** a red "Payroll account — Short by $3,000" alert.
@@ -54,7 +54,7 @@ If a step says "Couldn't verify this time", press **Try again**. Coinsel never s
 | NEAR AI Cloud (TEE, private inference) | `lib/ai.ts` (OpenAI-compatible chat calls) and `app/api/analyze/route.ts` (verify, then ask) |
 | Attestation verification | `lib/attestation.ts`: fresh nonce, Intel TDX quote (`@phala/dcap-qvl`), signer binding, compose-hash and RTMR3 replay, NVIDIA NRAS GPU verdict, gateway report, answer-signature check. Not included: TLS binding, image provenance |
 | NEAR Intents 1Click API (mainnet, price only) | `lib/intents.ts`: `POST /v0/quote` with `dry: true` (no money moves). Fallback "quote only" card |
-| NEAR Intents testnet via **Tidepool** (community sandbox, 1Click-compatible `/v0`) | `lib/tidepool.ts` (quote, status), `lib/swap-proposal.ts` (the exact `FunctionCall` proposal), `app/api/propose-swap`, `app/api/swap-status`, `app/SwapStep.tsx` |
+| NEAR Intents testnet via **Tidepool** (community sandbox, 1Click-compatible `/v0`) | `lib/tidepool.ts` (quote, status), `lib/swap-proposal.ts` (the exact `FunctionCall` proposal), `app/api/propose-swap`, `app/api/propose-register`, `app/api/swap-readiness`, `app/api/swap-status`, `app/SwapStep.tsx` |
 | NEAR testnet RPC | `lib/near.ts` (plain JSON-RPC `fetch`, default `https://rpc.testnet.fastnear.com`) |
 | near-api-js | `lib/chain-write.ts` and `scripts/` |
 
@@ -125,7 +125,7 @@ npm run setup:accounts   # makes 3 council accounts + 1 agent; prints a funder a
 npm run setup:dao        # Sputnik DAO: 2-of-3 council, agent may only add proposals, bond 0
 npm run setup:agent-key  # gives the agent its single add_proposal-only key, removes the setup key
 npm run setup:payroll    # DAO-owned payroll account (needs FUNDER_* and DAO_ACCOUNT_ID in env)
-npm run setup:tidepool   # optional: registers the DAO on the Tidepool test tokens (real Step 2 swap); add --check to only look
+npm run setup:tidepool   # optional, advanced (the app can do this itself): registers the DAO on the Tidepool test tokens (real Step 2 swap); add --check to only look
 npm run setup:check      # prints the live policy so you can confirm it
 ```
 Keys are written to `.secrets/` (git-ignored) and never printed in full. Copy them into your environment variables. Then edit `config/demo-treasury.json` (`daoOwnedAccounts`, `payrollAccountId`) to match your accounts. The DAO needs about 10 NEAR and the payroll account about 8 NEAR at the start; about 5.5 NEAR of the DAO is locked for contract storage.

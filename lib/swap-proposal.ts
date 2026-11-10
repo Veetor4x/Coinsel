@@ -44,3 +44,25 @@ export function parseSwapKind(kind: unknown): ParsedSwap | null {
   if (!DEPOSIT_ADDRESS.test(dep) || sa.registration_only !== true || ta.receiver_id !== dep || !AMOUNT.test(String(ta.amount))) return null;
   return { tokenContract: fc.receiver_id, depositAddress: dep, amountBase: String(ta.amount) };
 }
+
+// ---- Setup proposals: register the DAO itself on a Tidepool token contract (so it can hold test USDC / receive test wNEAR) ----
+// Exactly one action: storage_deposit { account_id: <the DAO>, registration_only: true } with 0.00125 NEAR paid by the DAO.
+export type ParsedRegister = { tokenContract: string; accountId: string };
+
+export function buildRegisterKind(tokenContract: string, dao: string) {
+  return { FunctionCall: { receiver_id: tokenContract, actions: [
+    { method_name: "storage_deposit", args: b64({ account_id: dao, registration_only: true }), deposit: STORAGE_DEPOSIT_YOCTO, gas: STORAGE_GAS },
+  ] } };
+}
+
+/** Strict reader: returns a value only for exactly what buildRegisterKind makes, on one of the two Tidepool token contracts. */
+export function parseRegisterKind(kind: unknown): ParsedRegister | null {
+  const fc = (kind as { FunctionCall?: { receiver_id?: unknown; actions?: unknown } } | null)?.FunctionCall;
+  if (!fc || (fc.receiver_id !== demo.tidepool.originContract && fc.receiver_id !== demo.tidepool.destinationContract)) return null;
+  if (!Array.isArray(fc.actions) || fc.actions.length !== 1) return null;
+  const a = fc.actions[0] as { method_name?: string; args?: string; deposit?: string };
+  if (a?.method_name !== "storage_deposit" || String(a.deposit) !== STORAGE_DEPOSIT_YOCTO) return null;
+  const args = unb64(a.args) as Record<string, unknown> | null;
+  if (!args || Object.keys(args).sort().join() !== "account_id,registration_only" || args.registration_only !== true || typeof args.account_id !== "string") return null;
+  return { tokenContract: fc.receiver_id as string, accountId: args.account_id };
+}

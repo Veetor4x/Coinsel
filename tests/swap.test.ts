@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import demo from "../config/demo-treasury.json";
-import { buildSwapKind, parseSwapKind, STORAGE_DEPOSIT_YOCTO } from "../lib/swap-proposal";
-import { checkSwapDeposit, SWAP_BLOCKED_MESSAGE } from "../lib/guard";
+import { buildRegisterKind, buildSwapKind, parseRegisterKind, parseSwapKind, STORAGE_DEPOSIT_YOCTO } from "../lib/swap-proposal";
+import { checkRegistration, checkSwapDeposit, SWAP_BLOCKED_MESSAGE } from "../lib/guard";
 import { freshLiveQuote, missingSetup, quoteMinutesLeft, readQuote, readStatus, requestQuote, swapPhase, tidepoolEnabled, toBase } from "../lib/tidepool";
-import { buildDescription, buildSwapDescription, STEP2_POINTER } from "../lib/proposal-text";
+import { buildDescription, buildRegisterDescription, buildSwapDescription, STEP2_POINTER } from "../lib/proposal-text";
 
 const T = demo.tidepool;
 const DAO = "dao.sputnikv2.testnet";
@@ -183,5 +183,48 @@ describe("setup hints + text", () => {
     const d = buildDescription({ ...base, step2Override: STEP2_POINTER });
     expect(d).toContain(STEP2_POINTER);
     expect(d).not.toContain("quote only");
+  });
+});
+
+describe("setup: register the DAO on the Tidepool token contracts", () => {
+  const b64 = (o: unknown) => Buffer.from(JSON.stringify(o)).toString("base64");
+  const clone = (k: object) => JSON.parse(JSON.stringify(k));
+  const allowed = [T.originContract, T.destinationContract];
+  it("round-trips for both token contracts, and is one storage_deposit for the DAO itself (0.00125 NEAR)", () => {
+    for (const c of allowed) {
+      const k = buildRegisterKind(c, DAO);
+      expect(parseRegisterKind(k)).toEqual({ tokenContract: c, accountId: DAO });
+      expect(k.FunctionCall.actions).toHaveLength(1);
+      expect(k.FunctionCall.actions[0].method_name).toBe("storage_deposit");
+      expect(k.FunctionCall.actions[0].deposit).toBe(STORAGE_DEPOSIT_YOCTO);
+    }
+  });
+  it("refuses anything else: other contract, other method, extra action, extra args, other deposit, swap or transfer shapes", () => {
+    const k = buildRegisterKind(T.originContract, DAO);
+    const mut = (f: (x: ReturnType<typeof buildRegisterKind>) => void) => { const c = clone(k); f(c); return c; };
+    const bad = [
+      mut((c) => { c.FunctionCall.receiver_id = "evil.testnet"; }),
+      mut((c) => { c.FunctionCall.actions[0].method_name = "ft_transfer"; }),
+      mut((c) => { c.FunctionCall.actions.push(c.FunctionCall.actions[0]); }),
+      mut((c) => { c.FunctionCall.actions[0].args = b64({ account_id: DAO, registration_only: true, extra: 1 }); }),
+      mut((c) => { c.FunctionCall.actions[0].args = b64({ account_id: DAO, registration_only: false }); }),
+      mut((c) => { c.FunctionCall.actions[0].deposit = "10000000000000000000000000"; }),
+      buildSwapKind({ tokenContract: T.originContract, depositAddress: DEP, amountBase: AMT }),
+      { Transfer: { token_id: "", receiver_id: DAO, amount: "1" } }, null,
+    ];
+    for (const x of bad) expect(parseRegisterKind(x)).toBeNull();
+  });
+  it("a swap proposal is never read as a setup proposal, and vice versa", () => {
+    expect(parseSwapKind(buildRegisterKind(T.originContract, DAO))).toBeNull();
+  });
+  it("guard: only the DAO itself, only the two token contracts", () => {
+    expect(checkRegistration({ tokenContract: T.originContract, accountId: DAO }, DAO, allowed).ok).toBe(true);
+    expect(checkRegistration({ tokenContract: T.originContract, accountId: "bob.testnet" }, DAO, allowed).ok).toBe(false);
+    expect(checkRegistration({ tokenContract: "evil.testnet", accountId: DAO }, DAO, allowed).ok).toBe(false);
+  });
+  it("proposal text is plain and says what it costs", () => {
+    const d = buildRegisterDescription({ tokenContract: T.originContract, label: T.originLabel, dao: DAO, why: "can hold it" });
+    for (const s of ["register the treasury", DAO, T.originContract, "0.00125 NEAR", "no value", "only suggest"]) expect(d).toContain(s);
+    expect(d.split("\n")[1]).toMatch(/^What: /);
   });
 });

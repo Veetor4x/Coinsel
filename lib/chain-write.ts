@@ -6,7 +6,7 @@ import { Account, actions, nearToYocto } from "near-api-js";
 import { RPC_URL } from "./near";
 import { getProposal } from "./sputnik";
 import { env } from "./env";
-import { buildSwapKind, type ParsedSwap } from "./swap-proposal";
+import { buildRegisterKind, buildSwapKind, type ParsedSwap } from "./swap-proposal";
 
 const TGAS = 10n ** 12n;
 
@@ -49,6 +49,11 @@ export async function fileTransferProposal(args: { dao: string; receiver: string
 /** Step 2: the agent files the swap-deposit proposal. The council still has to approve it; the agent can only ask. */
 export async function fileSwapProposal(args: { dao: string; swap: ParsedSwap; description: string }) {
   return addProposal(args.dao, args.description, buildSwapKind(args.swap));
+}
+
+/** Setup: the agent asks the council to register the DAO on a Tidepool token contract (the DAO pays 0.00125 NEAR if approved). */
+export async function fileRegisterProposal(args: { dao: string; tokenContract: string; description: string }) {
+  return addProposal(args.dao, args.description, buildRegisterKind(args.tokenContract, args.dao));
 }
 
 /** DEMO RESET: the payroll account sends NEAR back to the DAO. The destination is always the DAO; nothing else can be signed here. */

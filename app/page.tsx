@@ -264,7 +264,7 @@ export default function Home() {
         const n = { ...d, proposals: d.proposals.map((x) => (x.id === proposalId ? applyKnown(x) : x)) };
         return moved ? withPayroll(n, expectedNear) : n;
       });
-      setNotice(j.executed ? (prev?.swap ? "Approved by 2 of 3 — the test USDC was sent to the swap. Watch Step 2 for the result." : "Approved by 2 of 3 — the transfer ran on the test network. Balances below are now updated.") : `Council ${member} approved. ${j.approvals} of ${data?.council.threshold ?? 2} so far.`);
+      setNotice(j.executed ? (prev?.register ? "Approved by 2 of 3 — the treasury is being registered. Step 2 will update in a moment." : prev?.swap ? "Approved by 2 of 3 — the test USDC was sent to the swap. Watch Step 2 for the result." : "Approved by 2 of 3 — the transfer ran on the test network. Balances below are now updated.") : `Council ${member} approved. ${j.approvals} of ${data?.council.threshold ?? 2} so far.`);
       await load();
       if (j.executed) [2500, 7000].forEach((ms) => setTimeout(load, ms)); // balances can lag a few seconds
     } catch (e) { setNotice((e as Error).message); } finally { setBusy(null); }
@@ -279,10 +279,10 @@ export default function Home() {
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
           <span className="min-w-0 break-words">#{p.id} · {firstLine.replace(/^What: /, "")}</span>
           <span className={`${mono} text-xs ${p.status === "Approved" ? "text-accent" : p.status === "InProgress" ? "text-demo" : "text-zinc-400"}`}>
-            {p.status === "InProgress" ? `Waiting for votes · ${p.approvals} of ${data.council.threshold}` : p.status === "Approved" ? (p.swap ? "Approved — see Step 2" : "Approved — money moved") : p.status}
+            {p.status === "InProgress" ? `Waiting for votes · ${p.approvals} of ${data.council.threshold}` : p.status === "Approved" ? (p.swap || p.register ? "Approved — see Step 2" : "Approved — money moved") : p.status}
           </span>
         </div>
-        {p.status === "InProgress" && data.demoMode && (p.kind === "Transfer" || !!p.swap) && (
+        {p.status === "InProgress" && data.demoMode && (p.kind === "Transfer" || !!p.swap || !!p.register) && (
           <div className="mt-2">
             <div className="flex flex-wrap gap-2">
               {data.demoCouncil.map((m) => {
@@ -480,7 +480,7 @@ export default function Home() {
                       <p className="float float-b mt-3 text-zinc-200">Filed as suggestion <b>#{filed.proposalId}</b>. <a className="text-accent underline" href={filed.txUrl} target="_blank" rel="noreferrer">See it on the explorer ↗</a><br /><span className="text-xs text-zinc-500">Now the council votes — see “Suggestions” below.</span></p>
                     )}
                   </div>
-                  <SwapStep swap={a.swap} quote={a.quote} advice={a.advice} attestationHash={a.attestationHash} obligations={obs}
+                  <SwapStep dao={data.dao} swap={a.swap} quote={a.quote} advice={a.advice} attestationHash={a.attestationHash} obligations={obs}
                     key={swapKey} proposals={data.proposals} busyElsewhere={busy !== null} onChanged={load} />
                 </div>
                 <div className="min-w-0 lg:col-span-2"><VerifiedPanel a={a.attestation} hashes={{ request: a.advice.requestHash, response: a.advice.responseHash }} /></div>

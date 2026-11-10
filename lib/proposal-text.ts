@@ -44,3 +44,13 @@ export function buildSwapDescription(a: {
     "Coinsel can only suggest. It cannot send money or vote.",
   ].join("\n");
 }
+
+/** Setup proposal text: plain facts, no AI involved. */
+export function buildRegisterDescription(a: { tokenContract: string; label: string; dao: string; why: string }): string {
+  return [
+    "COINSEL SUGGESTION · SETUP (the council decides)",
+    `What: register the treasury (${a.dao}) on the ${a.label} token contract (${a.tokenContract}) so it ${a.why}. One-time fee of 0.00125 NEAR, paid by the treasury. Nothing else moves.`,
+    `This is a test token on ${T.label}. It has no value.`,
+    "Coinsel can only suggest. It cannot send money or vote.",
+  ].join("\n");
+}

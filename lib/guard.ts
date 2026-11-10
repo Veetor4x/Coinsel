@@ -2,7 +2,7 @@
 // Obligation notes and AI text are UNTRUSTED: we scan them and refuse anything that points outside.
 import demo from "@/config/demo-treasury.json";
 import { env } from "./env";
-import type { ParsedSwap } from "./swap-proposal";
+import type { ParsedRegister, ParsedSwap } from "./swap-proposal";
 
 const NEAR_ID = /\b(?:[a-z0-9]+(?:[-_][a-z0-9]+)*\.)+(?:testnet|near)\b/gi;
 const IMPLICIT = /\b[0-9a-f]{64}\b/gi;
@@ -67,5 +67,11 @@ export function checkSwapDeposit(
   if (!/^[1-9][0-9]*$/.test(a.swap.amountBase) || BigInt(a.swap.amountBase) > a.maxBase) return fail("amount too large");
   if (r.originAsset !== a.originAsset || r.destinationAsset !== a.destinationAsset || r.amountIn !== a.swap.amountBase) return fail("different swap");
   if (!r.recipient || !isDaoOwned(r.recipient, [a.dao.toLowerCase()]) || !r.refundTo || !isDaoOwned(r.refundTo, [a.dao.toLowerCase()])) return fail(String(r.recipient ?? r.refundTo ?? "unknown"));
+  return { ok: true };
+}
+
+/** A setup proposal may only register the DAO ITSELF on one of the two Tidepool token contracts (shape is checked by parseRegisterKind). */
+export function checkRegistration(reg: ParsedRegister, dao: string, allowedContracts: string[]): GuardResult {
+  if (!allowedContracts.includes(reg.tokenContract) || reg.accountId.toLowerCase() !== dao.toLowerCase()) return { ok: false, message: SWAP_BLOCKED_MESSAGE, outside: [reg.accountId] };
   return { ok: true };
 }

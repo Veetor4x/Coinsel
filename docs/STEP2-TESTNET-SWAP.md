@@ -1,27 +1,34 @@
-# Step 2 real test swap: one-time setup
+# Step 2 real test swap: one-time setup (all in the app, no computer needed)
 
-Step 2 swaps **10 test USDC** the DAO holds for **test wNEAR**, using Tidepool (a community-run NEAR Intents testnet sandbox). The tokens have no value. You only do this setup once per DAO (the faucet gives one claim per wallet every 7 days; each swap uses 10 USDC, so one claim covers about 10 swaps).
+Step 2 swaps **10 test USDC** the DAO holds for **test wNEAR**, using Tidepool (a community-run NEAR Intents testnet sandbox). The tokens have no value. You do the setup once per DAO. It works from a phone.
 
-## 1. Get the test tokens
+## 1. Switch it on
+Set `TIDEPOOL_SWAP_ENABLED=true` in your host's environment (Vercel: Settings → Environment Variables; tick **Preview** to try it on the preview link) and redeploy.
+
+## 2. Prepare the treasury (in the app)
+A token contract only lets an account hold its coins after the account is "registered" (a tiny 0.00125 NEAR fee, paid by the DAO).
+1. Open the app → **Get advice**. In **Step 2** you will see **One-time setup needed**.
+2. Press **Prepare treasury for testnet swaps**. Coinsel's agent files **two** suggestions (one per token contract). The agent can only ask; it signs nothing else.
+3. Scroll to **Suggestions**. For each of the two new suggestions press **Approve as Council 1**, then **Approve as Council 2** (same as Step 1).
+4. Step 2 updates by itself. It then shows **Ready, waiting for test USDC**.
+
+Only the exact setup call is accepted: `storage_deposit` for the DAO itself, on the Tidepool USDC or wNEAR contract, 0.00125 NEAR. Anything else is refused by the guard and by demo voting.
+
+## 3. Get test USDC into the DAO
 1. Open https://app.usetidepool.tech/faucet → **Tokens** tab → chain **NEAR**.
-2. Paste **your own testnet wallet** (for example `yourname.testnet`) → claim. You receive 100 USDC, 100 USDT, 40 wNEAR and a few others (a wallet can claim once per 7 days; 2 claims per internet connection per day).
-3. Optional shortcut: some people paste the DAO account (`DAO_ACCOUNT_ID`) directly in step 2. If the claim works, skip step 4.
+2. Paste the DAO account (`DAO_ACCOUNT_ID`, for example `coinselx69t-treasury.sputnikv2.testnet`) and claim. (One claim per address every 7 days.) You get 100 test USDC and 40 test wNEAR.
+3. If the faucet refuses the DAO address, claim to your own testnet wallet and send **at least 10 test USDC** (token `usdc.tidepool-sandbox.testnet`) to the DAO from your wallet.
+4. Step 2 changes to the **File step 2 for the council** button on its own once the DAO holds 10 USDC.
 
-## 2. Register the DAO on the two token contracts (one time)
-A token contract only lets an account hold its coins after the account is "registered" (a tiny 0.00125 NEAR fee each). Check first:
+## 4. Run the swap
+**File step 2 for the council** → in **Suggestions**, approve as Council 1 and 2 → Step 2 goes Approved → Swapping → Done, with links.
+
+---
+
+## Advanced: the same registration from a terminal
+Only if you prefer a script (needs Node and a testnet key you control):
 ```bash
-DAO_ACCOUNT_ID=your-dao.sputnikv2.testnet npm run setup:tidepool -- --check
+DAO_ACCOUNT_ID=... npm run setup:tidepool -- --check      # only looks
+DAO_ACCOUNT_ID=... FUNDER_ACCOUNT_ID=you.testnet FUNDER_PRIVATE_KEY=ed25519:... npm run setup:tidepool
 ```
-If it says `NOT registered yet`, register (needs any testnet account with about 0.01 NEAR):
-```bash
-DAO_ACCOUNT_ID=... FUNDER_ACCOUNT_ID=your-wallet.testnet FUNDER_PRIVATE_KEY=ed25519:... npm run setup:tidepool
-```
-(testnet key only; never paste a real wallet key anywhere.) Sending tokens from a wallet that offers to "pay storage" for the receiver does the same thing.
-
-## 3. Send 20 test USDC and 1 test wNEAR to the DAO
-From your wallet, send the **test USDC** token (`usdc.tidepool-sandbox.testnet`) to the DAO, at least 10 (send 20 so you can run it twice). Send a small amount of **test wNEAR** (`wnear.tidepool-sandbox.testnet`) too; this is optional once step 2 shows both as registered.
-
-## 4. Turn it on and try it
-Set `TIDEPOOL_SWAP_ENABLED=true` in the environment, redeploy, then: **Get advice** → the Step 2 card shows a quote → **File step 2 for the council** → **Approve as Council 1** and **Council 2** in Suggestions → watch Step 2 go Approved → Swapping → Done.
-
-If Step 2 says what is missing (for example "needs 10 test USDC (it has 0)"), do that step and press **Get advice** again.
+Testnet keys only. Never paste a real wallet key anywhere.
