@@ -39,6 +39,15 @@ export async function fileTransferProposal(args: { dao: string; receiver: string
   return { proposalId, txHash: String(outcome.transaction_outcome?.id ?? outcome.transaction?.hash ?? "") };
 }
 
+/** DEMO RESET: the payroll account sends NEAR back to the DAO. The destination is always the DAO; nothing else can be signed here. */
+export async function sendPayrollToDao(dao: string, payrollId: string, amountNear: number) {
+  const key = process.env.PAYROLL_PRIVATE_KEY;
+  if (!key) throw new Error("Reset isn't set up on this server (PAYROLL_PRIVATE_KEY).");
+  const yocto = nearToYocto(amountNear.toFixed(4) as `${number}`);
+  const outcome: any = await account(payrollId, key).signAndSendTransaction({ receiverId: dao, actions: [actions.transfer(yocto)], waitUntil: "FINAL" });
+  return { txHash: String(outcome.transaction_outcome?.id ?? "") };
+}
+
 export function demoCouncil(): { index: number; accountId: string; key: string }[] {
   return [1, 2, 3].flatMap((i) => {
     const accountId = process.env[`COUNCIL_${i}_ACCOUNT_ID`], key = process.env[`COUNCIL_${i}_PRIVATE_KEY`];

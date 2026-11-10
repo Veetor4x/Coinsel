@@ -15,10 +15,10 @@ export type QuoteResult =
 
 const num = (s: unknown, decimals: number) => Number(BigInt(String(s).split(".")[0])) / 10 ** decimals;
 
-/** How many USDC to quote: cover the gap (+20% room), never below the minimum, whole dollars. */
+/** Step 2 refills the reserve by what step 1 takes out: quote the gap in USDC (whole dollars, never below the minimum). */
 export function usdcToQuote(shortUsd: number): number {
   const c = demo.intents;
-  return Math.max(c.minUsdc, Math.ceil(Math.max(0, shortUsd) * 1.2));
+  return Math.max(c.minUsdc, Math.ceil(Math.max(0, shortUsd) - 1e-6));
 }
 
 async function once(usdc: number): Promise<QuoteResult> {

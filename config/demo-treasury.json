@@ -1,11 +1,11 @@
 {
-  "_note": "DEMO DATA. Obligations and the other-chain balance are NOT on-chain. The NEAR/USD price is a fixed demo number (1 test NEAR = $1,000), not a market price. Real balances come from the DAO on NEAR testnet.",
+  "_note": "DEMO DATA. Obligations and the other-chain balance are NOT on-chain. The NEAR/USD price is a fixed demo number (1 test NEAR = $1,000), not a market price. Real balances come from the DAO (the reserve) and its payroll account on NEAR testnet. Payouts are paid from the payroll account. startingGapNear is how short payroll is when the demo is reset.",
   "demoNearUsdPrice": 1000,
   "daoOwnedAccounts": [
     "coinselx69t-treasury.sputnikv2.testnet",
-    "coinselx69t-payroll.testnet"
+    "coinselx69t-payroll2.testnet"
   ],
-  "payrollAccountId": "coinselx69t-payroll.testnet",
+  "payrollAccountId": "coinselx69t-payroll2.testnet",
   "intents": {
     "_note": "NEAR Intents has no test network. This is a REAL price quote (dry run) for the cross-chain step; no money moves. The receiving address is a placeholder because the quote service only accepts main-network addresses.",
     "originAsset": "nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near",
@@ -63,7 +63,7 @@
     {
       "id": "grant-open-source",
       "label": "Grant \u2013 open-source tooling",
-      "amountNear": 3,
+      "amountNear": 1,
       "dueInDays": 30,
       "kind": "grant",
       "note": "Milestone 1 of 2"
@@ -77,5 +77,6 @@
       "usdValue": 40000
     }
   ],
-  "demoScaleLabel": "Demo scale \u2014 testnet amounts shown at real-world size"
+  "demoScaleLabel": "Demo scale \u2014 testnet amounts shown at real-world size",
+  "startingGapNear": 3
 }

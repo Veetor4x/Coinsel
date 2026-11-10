@@ -9,6 +9,8 @@ export type Balance = {
   amount: number; // in `symbol` units
   usdValue: number;
   source: Source;
+  /** Held on purpose to top up payouts (the main DAO account). Never counted as "idle". */
+  reserve?: boolean;
 };
 
 export type Obligation = {
@@ -46,6 +48,11 @@ export type HealthReport = {
   shortfalls: Shortfall[];
   idle: IdleFunds[];
   totalIdleUsd: number;
+  /** Total that payouts cannot cover from their own account. */
+  gapUsd: number;
+  /** Spare money in the reserve that could be moved over to cover the gap. */
+  reserveUsd: number;
+  reserveCoversGap: boolean;
   findings: Finding[];
 };
 
@@ -118,8 +125,9 @@ export function analyze(balances: Balance[], obligations: Obligation[]): HealthR
   const neededSoon = new Map<string, number>();
   for (const o of obs) if (o.dueInDays <= IDLE_WINDOW_DAYS) neededSoon.set(o.chain, (neededSoon.get(o.chain) ?? 0) + o.amountUsd);
   const chainTotals = new Map<string, number>();
-  for (const b of balances) chainTotals.set(b.chain, (chainTotals.get(b.chain) ?? 0) + clean(b.usdValue));
-  for (const b of balances) {
+  const held = balances.filter((b) => !b.reserve); // the reserve is kept on purpose, so it is not "idle"
+  for (const b of held) chainTotals.set(b.chain, (chainTotals.get(b.chain) ?? 0) + clean(b.usdValue));
+  for (const b of held) {
     const chainTotal = chainTotals.get(b.chain) ?? 0;
     if (chainTotal <= 0 || clean(b.usdValue) <= 0) continue;
     const chainIdle = Math.max(0, chainTotal - (neededSoon.get(b.chain) ?? 0));
@@ -134,6 +142,8 @@ export function analyze(balances: Balance[], obligations: Obligation[]): HealthR
     findings.push({ id: "empty", severity: "critical", title: "The treasury is empty", detail: obs.length ? "There is no money to pay anyone." : "There is no money here yet." });
   }
   const shortTotal = round2(shortfalls.reduce((s, x) => s + x.shortUsd, 0));
+  const reserveUsd = round2(balances.filter((b) => b.reserve).reduce((s, b) => s + clean(b.usdValue), 0));
+  const reserveCoversGap = shortTotal > EPS && reserveUsd + EPS >= shortTotal;
   if (shortfalls.length) {
     const first = shortfalls[0];
     const sameDay = shortfalls.filter((s) => s.dueInDays === first.dueInDays);
@@ -146,6 +156,11 @@ export function analyze(balances: Balance[], obligations: Obligation[]): HealthR
     });
   } else if (obs.length) {
     findings.push({ id: "covered", severity: "ok", title: "Every upcoming payout is covered", detail: `There is enough money for all ${obs.length} payout${obs.length === 1 ? "" : "s"} (${usd(totalDue)} in total).` });
+  }
+  if (shortTotal > EPS && reserveUsd > EPS) {
+    findings.push(reserveCoversGap
+      ? { id: "reserve-covers", severity: "warning", title: "The main reserve can cover the gap", detail: `The reserve has ${usd(reserveUsd)} to spare. Moving ${usd(shortTotal)} to the payroll account fixes it.` }
+      : { id: "reserve-short", severity: "critical", title: "The main reserve can't cover the gap on its own", detail: `The reserve has ${usd(reserveUsd)} to spare, but ${usd(shortTotal)} is needed.` });
   }
   if (runwayDays !== null && firstShortfallInDays === null && runwayDays < LOW_RUNWAY_DAYS) {
     findings.push({ id: "low-runway", severity: "warning", title: "Running low", detail: `At this pace the money lasts about ${days(runwayDays)}.` });
@@ -169,5 +184,5 @@ export function analyze(balances: Balance[], obligations: Obligation[]): HealthR
   const order: Record<Severity, number> = { critical: 0, warning: 1, info: 2, ok: 3 };
   findings.sort((a, b) => order[a.severity] - order[b.severity]);
 
-  return { totalUsd, runwayDays, firstShortfallInDays, shortfalls, idle, totalIdleUsd, findings };
+  return { totalUsd, runwayDays, firstShortfallInDays, shortfalls, idle, totalIdleUsd, gapUsd: shortTotal, reserveUsd, reserveCoversGap, findings };
 }

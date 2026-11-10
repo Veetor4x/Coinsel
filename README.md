@@ -18,11 +18,13 @@ The Ethereum USDC balance, the payout list and the NEAR price ($3) are demo data
 Other-chain balances and the payroll/grant obligations are demo data in `config/demo-treasury.json`. Nothing uses mainnet funds.
 
 ## Try it (do X → see Y)
-1. Open the app → **see** the DAO's real test-network balance and "Payouts are short in 9 days".
+1. Open the app → **see** the real test-network balances (the payroll account pays everyone; the main DAO account is the reserve) and a red "Payroll account — Short by $3,000" alert.
 2. Press **Get advice** → **see** plain-English advice plus a **Verified private** panel (real Intel/NVIDIA hardware proofs from NEAR AI Cloud; if the check fails twice you get "Couldn't verify this time" and a **Try again** button — never unverified advice).
-3. Press **File this suggestion** → **see** a real Sputnik proposal on testnet (explorer link). It is filed by the agent account, whose only key can call `add_proposal` on the DAO.
-4. Press **Approve as Council 1**, then **Council 2** (DEMO_MODE: the server signs with testnet council keys) → **see** the proposal execute and balances update. In real use each council member signs with their own wallet.
-5. Press **Try the trick** → **see** "Blocked: that address isn't yours…" (the guard refuses any address the DAO doesn't own).
+   The advice is a two-step plan, with the same numbers everywhere (computed in code; the AI only explains them): **Step 1** (on NEAR, this proposal) moves the gap from the reserve to the payroll account; **Step 2** (another network, quote only) refills the reserve from idle USDC on Ethereum via NEAR Intents.
+3. Press **File step 1 for the council** → **see** a real Sputnik proposal on testnet (explorer link). It is filed by the agent account, whose only key can call `add_proposal` on the DAO.
+4. Press **Approve as Council 1**, then **Council 2** (DEMO_MODE: the server signs with testnet council keys) → **see** the proposal execute, the alert turn green ("Covered") and the runway grow. In real use each council member signs with their own wallet.
+5. Press **Reset demo** (bottom of the page) → **see** the money go back so payroll is short again; you can run the story again. Reset only lets the payroll account send money back to the DAO. If the main reserve is too low, the page says "Demo needs a top-up" instead of failing.
+6. Press **Try the trick** → **see** "Blocked: that address isn't yours…" (the guard refuses any address the DAO doesn't own).
 
 ## Run locally
 ```bash
@@ -32,8 +34,8 @@ npm test         # unit tests
 ```
 
 ## Testnet setup (once)
-(`npm run setup:payroll` also creates the DAO-owned payroll account, paid for by `FUNDER_ACCOUNT_ID` / `FUNDER_PRIVATE_KEY`.)
-The suggestion moves the whole gap the advice names (e.g. 3 NEAR = $3,000 at demo scale). About 5.5 NEAR of the DAO's balance is locked for contract storage, so after a run the main account may be too low for the next one: top it up from the test faucet if "can't spare" appears.
+(`npm run setup:payroll` also creates the DAO-owned payroll account, paid for by `FUNDER_ACCOUNT_ID` / `FUNDER_PRIVATE_KEY`. Its key goes in `PAYROLL_PRIVATE_KEY`, used only by "Reset demo".)
+The suggestion moves the whole gap the advice names (3 NEAR = $3,000 at demo scale). About 5.5 NEAR of the DAO's balance is locked for contract storage; keep the DAO at about 10 NEAR and the payroll account at about 8 NEAR at the start. Top the DAO up from the test faucet if "Demo needs a top-up" appears.
 
 Creates 3 council accounts, 1 agent account and a Sputnik DAO (proposal bond 0, 2-of-3 council, agent may only add proposals),
 then gives the agent a function-call key limited to `add_proposal` on the DAO.

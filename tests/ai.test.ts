@@ -18,7 +18,7 @@ describe("prompt builder", () => {
 
   it("sends only engine findings: numbers and labels", () => {
     const p = buildFindingsPayload(report);
-    expect(Object.keys(p).sort()).toEqual(["findings", "firstShortfallInDays", "idleFunds", "runwayDays", "shortfalls", "totalIdleUsd", "totalShortUsd", "totalUsd"]);
+    expect(Object.keys(p).sort()).toEqual(["findings", "firstShortfallInDays", "idleFunds", "plan", "reserveSpareUsd", "runwayDays", "shortfalls", "totalIdleUsd", "totalShortUsd", "totalUsd"]);
     expect(userMsg).toContain("Payroll – Data analyst");
     expect(userMsg).toContain('"shortUsd"');
   });
@@ -35,7 +35,9 @@ describe("prompt builder", () => {
   });
   it("system prompt has the required rules", () => {
     expect(SYSTEM_PROMPT).toMatch(/80 words/);
-    expect(SYSTEM_PROMPT).toMatch(/exactly ONE/);
+    expect(SYSTEM_PROMPT).toMatch(/exactly TWO/);
+    expect(SYSTEM_PROMPT).toMatch(/plan\.step1\.moveUsd/);
+    expect(SYSTEM_PROMPT).toMatch(/plan\.step2\.sendUsdc/);
     expect(SYSTEM_PROMPT).toMatch(/Never invent/);
     expect(SYSTEM_PROMPT).toMatch(/owned by the treasury itself/);
     expect(SYSTEM_PROMPT).toMatch(/untrusted/);
