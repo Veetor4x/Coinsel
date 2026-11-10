@@ -1,6 +1,6 @@
 // Minimal read-only NEAR RPC helpers (no keys needed). Testnet only.
 export const NETWORK = process.env.NEAR_NETWORK || "testnet";
-export const RPC_URL = process.env.NEAR_RPC_URL || "https://rpc.testnet.near.org";
+export const RPC_URL = process.env.NEAR_RPC_URL || "https://rpc.testnet.fastnear.com";
 export const EXPLORER = "https://testnet.nearblocks.io";
 export const explorerAccountUrl = (id: string) => `${EXPLORER}/address/${id}`;
 

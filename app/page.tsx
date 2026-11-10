@@ -160,7 +160,7 @@ export default function Home() {
       known.current.clear(); setAnalysis(null); setFiled(null);
       if (data) setObs(data.demo.obligations);
       if (data && j.movedNear) {
-        const expectedNear = data.payroll.nearBalance - j.movedNear;
+        const expectedNear = data.demo.startingPayrollNear; // reset always lands on the known starting amount
         expectPayroll.current = { near: expectedNear, until: deadline() };
         setData((d) => (d ? withPayroll(d, expectedNear) : d));
       }

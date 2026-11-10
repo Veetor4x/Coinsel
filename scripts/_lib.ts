@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 export const NETWORK = "testnet";
 // Official public testnet RPC (checked 2026-11-09). Override with NEAR_RPC_URL.
-export const RPC_URL = process.env.NEAR_RPC_URL || "https://rpc.testnet.near.org";
+export const RPC_URL = process.env.NEAR_RPC_URL || "https://rpc.testnet.fastnear.com";
 // Sputnik DAO v2 factory on testnet (checked on-chain 2026-11-09: has get_dao_list, 5k+ DAOs).
 export const SPUTNIK_FACTORY = "sputnikv2.testnet";
 
