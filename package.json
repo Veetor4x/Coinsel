@@ -16,6 +16,8 @@
     "setup:payroll": "tsx scripts/create-payroll.ts"
   },
   "dependencies": {
+    "@noble/curves": "^2.4.0",
+    "@noble/hashes": "^2.4.0",
     "@phala/dcap-qvl": "^0.7.1",
     "dotenv": "^18.0.10",
     "near-api-js": "^7.4.0",

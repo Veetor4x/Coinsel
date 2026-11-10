@@ -3,17 +3,21 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { analyze, type Severity } from "@/lib/engine";
 import { toEngineInputs, totalNear, type UiObligation as Obligation } from "@/lib/engine-inputs";
 import { TRICK_NOTE } from "@/lib/trick";
+import demo from "@/config/demo-treasury.json";
 import type { Treasury } from "@/lib/treasury";
-import type { Attestation } from "@/lib/attestation";
 import type { QuoteResult } from "@/lib/intents";
 import type { HealthReport } from "@/lib/engine";
+import { VerifiedPanel, type AttestationView } from "./AskCoinsel";
 
 type Data = Omit<Treasury, "proposals"> & { proposals: (Treasury["proposals"][number])[] };
-type Ok = { status: "ok"; health: HealthReport; quote: QuoteResult; quoteUsdc: number; attestation: Attestation; advice: { text: string; model: string; responseHash: string }; transferNear: number; payrollAccount: string };
+type Ok = {
+  status: "ok"; health: HealthReport; quote: QuoteResult; quoteUsdc: number; attestation: AttestationView; attestationHash: string;
+  advice: { text: string; model: string; responseHash: string; requestHash: string }; transferNear: number; transferUsd: number; payrollAccount: string;
+};
 type Analysis =
   | Ok
   | { status: "blocked"; message: string; why: string; outside: string[]; label?: string }
-  | { status: "unverified"; attestation: Attestation & { attempts?: number } }
+  | { status: "unverified"; attestation: AttestationView | null }
   | { status: "error"; message: string };
 type Filed = { proposalId: number; amountNear: number; receiver: string; txUrl: string };
 
@@ -129,7 +133,7 @@ export default function Home() {
     try {
       const r = await fetch("/api/propose", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ obligations: obs, advice: a.advice, attestationHash: a.attestation.attestationHash, quoteUsdc: a.quoteUsdc }),
+        body: JSON.stringify({ obligations: obs, advice: a.advice, attestationHash: a.attestationHash, quoteUsdc: a.quoteUsdc }),
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.message || j.error || "Couldn't file it.");
@@ -172,9 +176,13 @@ export default function Home() {
 
       {data && calc && (
         <div className="grid gap-5 md:grid-cols-3">
+          <div className="md:col-span-3 -mb-2 flex flex-wrap items-center gap-2 text-xs">
+            <Badge kind="demo">{demo.demoScaleLabel}</Badge>
+            <span className="text-zinc-500">1 test NEAR is shown as {usd(calc.price)}. Amounts in NEAR, accounts and explorer links are real.</span>
+          </div>
           <Card title="Total treasury" className="md:col-span-1" right={<Badge kind="real" />}>
             <div className="text-4xl font-semibold">{usd(calc.realUsd)}</div>
-            <p className="mt-1 text-sm text-zinc-400">{near(calc.bal)} × ${calc.price} <span className="text-[#FFC56E]">(fixed demo price)</span></p>
+            <p className="mt-1 text-sm text-zinc-400">{near(calc.bal)} <span className="text-[#FFC56E]">(shown at demo scale)</span></p>
             <div className="mt-3 space-y-1 text-sm text-zinc-300">
               <div className="flex justify-between"><span>Main account</span><span>{near(data.onChain.nearBalance)}</span></div>
               <div className="flex justify-between"><span><a className="hover:text-[#C6FF3D]" href={data.payroll.explorerUrl} target="_blank" rel="noreferrer">Payroll account ↗</a></span><span>{near(data.payroll.nearBalance)}</span></div>
@@ -216,7 +224,7 @@ export default function Home() {
             <div className="mt-1 grid grid-cols-12 gap-2 text-[11px] text-zinc-500"><span className="col-span-5">Label</span><span className="col-span-2">NEAR</span><span className="col-span-2">Due in (days)</span><span className="col-span-3">Note</span></div>
             <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-sm">
               <button onClick={add} className={btnGhost}>+ Add payout</button>
-              <span className="text-zinc-400">Total {near(calc.totalDue)} · changes stay in your browser only</span>
+              <span className="text-zinc-400">Total {near(calc.totalDue)} ({usd(calc.totalDue * calc.price)}) · changes stay in your browser only</span>
             </div>
           </Card>
 
@@ -282,7 +290,7 @@ export default function Home() {
                 <div className="font-semibold text-[#FFC56E]">Couldn&apos;t verify this time</div>
                 <p className="mt-1 text-sm text-zinc-300">We only show advice from an AI we could check is private, and the check didn&apos;t pass (we tried twice). Nothing was sent to the AI.</p>
                 <button className={`${btn} mt-3`} disabled={busy !== null} onClick={() => runAnalysis()}>Try again</button>
-                <details className="mt-2 text-xs text-zinc-500"><summary className="cursor-pointer">Details</summary>{a.attestation.error ?? "A check failed."} {a.attestation.checks.filter((c) => !c.ok).map((c) => c.detail).join(" · ")}</details>
+                <details className="mt-2 text-xs text-zinc-500"><summary className="cursor-pointer">Details</summary>{(a.attestation?.checks ?? []).filter((c) => c.status !== "pass").map((c) => `${c.id}: ${c.details}`).join(" · ") || "The proof service did not answer."}</details>
               </div>
             )}
 
@@ -302,13 +310,13 @@ export default function Home() {
                   <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-4 text-sm">
                     <div className="mb-1 flex flex-wrap items-center gap-2"><span className="font-semibold">Cross-network step</span><Badge kind="demo">Quote only</Badge></div>
                     {a.quote.ok ? (
-                      <p className="text-zinc-300">{a.quote.amountInUsdc} USDC on Ethereum would become about <b>{a.quote.amountOutNear.toFixed(2)} NEAR</b> in about {a.quote.timeEstimateSec} seconds.</p>
+                      <p className="text-zinc-300">{a.quote.amountInUsdc.toLocaleString("en-US")} USDC on Ethereum would become about <b>{usd(a.quote.amountOutUsd)}</b> of NEAR in about {a.quote.timeEstimateSec} seconds.</p>
                     ) : <p className="text-[#FFC56E]">{a.quote.error}</p>}
                     <p className="mt-1 text-xs text-zinc-500">{a.quote.label}</p>
                   </div>
                   <div className="mt-3 rounded-xl border border-[#C6FF3D]/30 bg-[#C6FF3D]/5 p-4 text-sm">
                     <div className="font-semibold">The suggestion</div>
-                    <p className="mt-1 text-zinc-300">Move <b>{near(a.transferNear)}</b> from the main account to the payroll account (<a className="underline" href={nb(a.payrollAccount)} target="_blank" rel="noreferrer">{short(a.payrollAccount)}</a>). It only goes to an account the treasury owns.</p>
+                    <p className="mt-1 text-zinc-300">Move <b>{near(a.transferNear)}</b> <span className="text-[#FFC56E]">(≈ {usd(a.transferUsd)} at demo scale)</span> from the main account to the payroll account (<a className="underline" href={nb(a.payrollAccount)} target="_blank" rel="noreferrer">{short(a.payrollAccount)}</a>). It only goes to an account the treasury owns.</p>
                     {!filed && <button className={`${btn} mt-3`} disabled={busy !== null || a.transferNear <= 0} onClick={() => fileIt(a)}>{busy === "file" ? "Filing…" : "File this suggestion for the council"}</button>}
                     {a.transferNear <= 0 && <p className="mt-2 text-xs text-[#FFC56E]">The main account has no spare NEAR right now (most of it pays for storage). Top it up from the test faucet.</p>}
                     {filed && (
@@ -316,25 +324,7 @@ export default function Home() {
                     )}
                   </div>
                 </div>
-                <div className="rounded-xl border border-[#C6FF3D]/40 bg-[#C6FF3D]/5 p-4 lg:col-span-2">
-                  <div className="mb-1 flex items-center justify-between"><span className="font-semibold text-[#C6FF3D]">✓ Verified private</span><Badge kind="real">Real check</Badge></div>
-                  <p className="mb-3 text-sm text-zinc-300">Your data stayed private — and you can check that.</p>
-                  <ul className="space-y-2 text-sm">
-                    {a.attestation.checks.map((c) => (
-                      <li key={c.id} className="flex gap-2"><span className="text-[#C6FF3D]">✓</span><span>{c.label}</span></li>
-                    ))}
-                  </ul>
-                  <details className="mt-3 text-xs text-zinc-500">
-                    <summary className="cursor-pointer">Details</summary>
-                    <ul className={`mt-2 space-y-1 ${mono} break-words`}>
-                      {a.attestation.checks.map((c) => <li key={c.id}><b>{c.id}</b>: {c.detail}</li>)}
-                      <li>model: {a.advice.model}</li>
-                      <li>attestation: {a.attestation.attestationHash.slice(0, 22)}…</li>
-                      <li>answer: {a.advice.responseHash.slice(0, 22)}…</li>
-                    </ul>
-                    <p className="mt-2">Checked just now with a fresh random number, using Intel and NVIDIA hardware proofs from NEAR AI Cloud. We keep nothing on our server.</p>
-                  </details>
-                </div>
+                <div className="lg:col-span-2"><VerifiedPanel a={a.attestation} hashes={{ request: a.advice.requestHash, response: a.advice.responseHash }} /></div>
               </div>
             )}
           </Card>

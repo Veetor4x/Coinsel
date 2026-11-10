@@ -8,7 +8,7 @@ export const QUOTE_LABEL = "Real price quote — no money moved (NEAR Intents ha
 export type QuoteResult =
   | {
       ok: true; label: string; fromLabel: string; toLabel: string;
-      amountInUsdc: number; amountInUsd: number; amountOutNear: number; minAmountOutNear: number;
+      amountInUsdc: number; amountInUsd: number; amountOutUsd: number; amountOutNear: number; minAmountOutNear: number;
       timeEstimateSec: number; signature: string; quotedAt: string;
     }
   | { ok: false; label: string; error: string };
@@ -48,7 +48,7 @@ async function once(usdc: number): Promise<QuoteResult> {
   const q = j.quote;
   return {
     ok: true, label: QUOTE_LABEL, fromLabel: c.originLabel, toLabel: c.destinationLabel,
-    amountInUsdc: num(q.amountIn, c.originDecimals), amountInUsd: Number(q.amountInUsd),
+    amountInUsdc: num(q.amountIn, c.originDecimals), amountInUsd: Number(q.amountInUsd), amountOutUsd: Number(q.amountOutUsd),
     amountOutNear: num(q.amountOut, c.destinationDecimals), minAmountOutNear: num(q.minAmountOut, c.destinationDecimals),
     timeEstimateSec: Number(q.timeEstimate) || 0, signature: String(j.signature ?? ""), quotedAt: String(j.timestamp ?? new Date().toISOString()),
   };

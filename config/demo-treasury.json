@@ -1,6 +1,6 @@
 {
-  "_note": "DEMO DATA. Obligations and the other-chain balance are NOT on-chain. The NEAR/USD price is a fixed demo number, not a market price. Real balances come from the DAO on NEAR testnet.",
-  "demoNearUsdPrice": 3,
+  "_note": "DEMO DATA. Obligations and the other-chain balance are NOT on-chain. The NEAR/USD price is a fixed demo number (1 test NEAR = $1,000), not a market price. Real balances come from the DAO on NEAR testnet.",
+  "demoNearUsdPrice": 1000,
   "daoOwnedAccounts": [
     "coinselx69t-treasury.sputnikv2.testnet",
     "coinselx69t-payroll.testnet"
@@ -23,7 +23,7 @@
   "obligations": [
     {
       "id": "payroll-product-designer",
-      "label": "Payroll – Product designer",
+      "label": "Payroll \u2013 Product designer",
       "amountNear": 2,
       "dueInDays": 9,
       "kind": "payroll",
@@ -31,7 +31,7 @@
     },
     {
       "id": "payroll-core-engineer",
-      "label": "Payroll – Core engineer",
+      "label": "Payroll \u2013 Core engineer",
       "amountNear": 2,
       "dueInDays": 9,
       "kind": "payroll",
@@ -39,7 +39,7 @@
     },
     {
       "id": "payroll-community-lead",
-      "label": "Payroll – Community lead",
+      "label": "Payroll \u2013 Community lead",
       "amountNear": 2,
       "dueInDays": 9,
       "kind": "payroll",
@@ -47,7 +47,7 @@
     },
     {
       "id": "payroll-smart-contract-dev",
-      "label": "Payroll – Smart-contract dev",
+      "label": "Payroll \u2013 Smart-contract dev",
       "amountNear": 2,
       "dueInDays": 9,
       "kind": "payroll",
@@ -55,7 +55,7 @@
     },
     {
       "id": "payroll-data-analyst",
-      "label": "Payroll – Data analyst",
+      "label": "Payroll \u2013 Data analyst",
       "amountNear": 2,
       "dueInDays": 9,
       "kind": "payroll",
@@ -63,7 +63,7 @@
     },
     {
       "id": "grant-open-source",
-      "label": "Grant – open-source tooling",
+      "label": "Grant \u2013 open-source tooling",
       "amountNear": 3,
       "dueInDays": 30,
       "kind": "grant",
@@ -74,8 +74,9 @@
     {
       "chain": "Ethereum",
       "symbol": "USDC",
-      "amount": 12500,
-      "usdValue": 12500
+      "amount": 40000,
+      "usdValue": 40000
     }
-  ]
+  ],
+  "demoScaleLabel": "Demo scale \u2014 testnet amounts shown at real-world size"
 }

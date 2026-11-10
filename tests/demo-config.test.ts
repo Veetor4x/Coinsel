@@ -12,3 +12,13 @@ describe("demo treasury config", () => {
     expect(demo._note).toMatch(/NOT on-chain/);
   });
 });
+
+describe("demo scale", () => {
+  it("shows realistic sizes: 1 test NEAR = $1,000, payroll about $10,000, idle USDC about $40,000", () => {
+    expect(demo.demoNearUsdPrice).toBe(1000);
+    const payrollUsd = demo.obligations.filter((o) => o.kind === "payroll").reduce((s, o) => s + o.amountNear * demo.demoNearUsdPrice, 0);
+    expect(payrollUsd).toBe(10000);
+    expect(demo.otherChainBalances[0].usdValue).toBe(40000);
+    expect(demo.demoScaleLabel).toBe("Demo scale — testnet amounts shown at real-world size");
+  });
+});
