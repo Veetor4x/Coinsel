@@ -4,7 +4,9 @@ import { NextResponse } from "next/server";
 import demo from "@/config/demo-treasury.json";
 import { checkDestination, checkObligations, checkText } from "@/lib/guard";
 import { parseObligations } from "@/lib/obligations";
-import { spendableNear } from "@/lib/treasury";
+import { loadTreasury, spendableNear } from "@/lib/treasury";
+import { analyze } from "@/lib/engine";
+import { gapNear, toEngineInputs } from "@/lib/engine-inputs";
 import { getDryQuote, usdcToQuote } from "@/lib/intents";
 import { buildDescription } from "@/lib/proposal-text";
 import { fileTransferProposal } from "@/lib/chain-write";
@@ -28,8 +30,12 @@ export async function POST(req: Request) {
 
   try {
     const spend = await spendableNear(dao);
-    const amountNear = Math.round(Math.min(demo.payrollTransferNear, spend) * 100) / 100;
-    if (amountNear <= 0) return NextResponse.json({ error: "The treasury can't afford this transfer right now, so nothing was filed." }, { status: 409 });
+    // Recomputed here from the chain + the payouts, so it always equals the gap the advice named.
+    const t = await loadTreasury();
+    const { balances, obligations } = toEngineInputs(t, obs);
+    const amountNear = gapNear(analyze(balances, obligations), demo.demoNearUsdPrice);
+    if (amountNear <= 0) return NextResponse.json({ error: "Nothing is short right now, so there is nothing to file." }, { status: 409 });
+    if (amountNear > spend + 1e-9) return NextResponse.json({ error: `The main account can only spare ${spend.toFixed(2)} NEAR but the gap is ${amountNear} NEAR. Top it up from the test faucet, then try again.` }, { status: 409 });
     // Same size as the quote the advice quoted, so the numbers the council reads agree.
     const q = Number(b?.quoteUsdc);
     const quote = await getDryQuote(Number.isFinite(q) && q >= 1 && q <= 100000 ? q : usdcToQuote(12));

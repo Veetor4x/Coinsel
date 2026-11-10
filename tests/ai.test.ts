@@ -18,7 +18,7 @@ describe("prompt builder", () => {
 
   it("sends only engine findings: numbers and labels", () => {
     const p = buildFindingsPayload(report);
-    expect(Object.keys(p).sort()).toEqual(["findings", "firstShortfallInDays", "idleFunds", "runwayDays", "shortfalls", "totalIdleUsd", "totalUsd"]);
+    expect(Object.keys(p).sort()).toEqual(["findings", "firstShortfallInDays", "idleFunds", "runwayDays", "shortfalls", "totalIdleUsd", "totalShortUsd", "totalUsd"]);
     expect(userMsg).toContain("Payroll – Data analyst");
     expect(userMsg).toContain('"shortUsd"');
   });
