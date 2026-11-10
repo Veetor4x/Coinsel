@@ -33,7 +33,7 @@ npm test         # unit tests
 
 ## Testnet setup (once)
 (`npm run setup:payroll` also creates the DAO-owned payroll account, paid for by `FUNDER_ACCOUNT_ID` / `FUNDER_PRIVATE_KEY`.)
-Most of the DAO's balance is locked for contract storage, so the demo moves only 0.1 NEAR per run; top the DAO up from the faucet if "can't afford" appears.
+The suggestion moves the whole gap the advice names (e.g. 3 NEAR = $3,000 at demo scale). About 5.5 NEAR of the DAO's balance is locked for contract storage, so after a run the main account may be too low for the next one: top it up from the test faucet if "can't spare" appears.
 
 Creates 3 council accounts, 1 agent account and a Sputnik DAO (proposal bond 0, 2-of-3 council, agent may only add proposals),
 then gives the agent a function-call key limited to `add_proposal` on the DAO.

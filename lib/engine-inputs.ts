@@ -11,6 +11,12 @@ type T = {
 /** NEAR in the DAO + its own payroll account (both DAO-owned, so moving money between them changes nothing). */
 export const totalNear = (t: T) => t.onChain.nearBalance + t.payroll.nearBalance;
 
+/** The whole gap the advice names, in NEAR (rounded up to 0.01). The suggestion moves exactly this much. */
+export function gapNear(health: { shortfalls: { shortUsd: number }[] }, price: number): number {
+  const usd = health.shortfalls.reduce((s, x) => s + x.shortUsd, 0);
+  return usd > 0 && price > 0 ? Math.ceil((usd / price) * 100 - 1e-6) / 100 : 0;
+}
+
 export function toEngineInputs(t: T, obs: UiObligation[]): { balances: Balance[]; obligations: EngineObligation[] } {
   const price = t.demo.demoNearUsdPrice;
   const n = totalNear(t);

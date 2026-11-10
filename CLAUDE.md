@@ -125,3 +125,10 @@ NEAR_NETWORK, NEAR_RPC_URL, DAO_ACCOUNT_ID, AGENT_ACCOUNT_ID, AGENT_FUNCTION_CAL
 - Only engine numbers + sanitised payout labels go to the AI. Obligation notes, ids, accounts and keys never do.
 - One analysis ≈ 800–900 tokens ≈ $0.0006.
 - Demo scale: `demoNearUsdPrice` = 1000 (1 test NEAR = $1,000 demo value), idle USDC $40,000. Display + AI prompt only; on-chain amounts/links are real. Badge: "Demo scale — testnet amounts shown at real-world size".
+
+## Day 4 part 1 decisions (2026-11-10)
+- Mobile: single-column grid uses `grid-cols-1`, payouts stack on phones, long ids truncate/wrap, wordmark is "COINSEL" with smaller spacing on phones. Checked at 390px and 768px (no horizontal overflow).
+- The suggestion amount = the FULL gap (total shortfall / demo price, rounded up to 0.01 NEAR), computed in `gapNear` (lib/engine-inputs.ts) by both /api/analyze and /api/propose. `payrollTransferNear` was removed. The AI payload now includes `totalShortUsd` so the advice names the same number.
+- A transfer between DAO and payroll does not change the total, so the gap stays after a run; the DAO needs spendable NEAR >= gap (storage locks ~5.5 NEAR). Demo state now: DAO 8 NEAR, payroll 3.5 NEAR (gap $1,500). Top up via the faucet helper (POST https://helper.nearprotocol.com/account creates a 10-NEAR testnet account), then transfer to the DAO.
+- Trick note present on "Get advice" -> blocked card with "Remove the note" button (client check + server guard). Suggestions show latest 3; older are collapsed.
+- Vote results are remembered client-side so a lagging chain read can't undo "Approved".

@@ -30,7 +30,6 @@ export async function loadTreasury() {
     demo: {
       note: demo._note,
       demoNearUsdPrice: demo.demoNearUsdPrice,
-      payrollTransferNear: demo.payrollTransferNear,
       obligations: demo.obligations,
       otherChainBalances: demo.otherChainBalances,
     },

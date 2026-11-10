@@ -6,7 +6,6 @@
     "coinselx69t-payroll.testnet"
   ],
   "payrollAccountId": "coinselx69t-payroll.testnet",
-  "payrollTransferNear": 0.1,
   "intents": {
     "_note": "NEAR Intents has no test network. This is a REAL price quote (dry run) for the cross-chain step; no money moves. The receiving address is a placeholder because the quote service only accepts main-network addresses.",
     "originAsset": "nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near",

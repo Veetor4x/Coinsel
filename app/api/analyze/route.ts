@@ -2,9 +2,8 @@
 // Fail-closed: advice is only returned when ALL checks pass. Nothing is stored.
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
-import demo from "@/config/demo-treasury.json";
 import { analyze } from "@/lib/engine";
-import { toEngineInputs, totalNear } from "@/lib/engine-inputs";
+import { gapNear, toEngineInputs, totalNear } from "@/lib/engine-inputs";
 import { parseObligations } from "@/lib/obligations";
 import { checkObligations, checkText } from "@/lib/guard";
 import { loadTreasury, spendableNear } from "@/lib/treasury";
@@ -58,12 +57,14 @@ export async function POST(req: Request) {
       if (!ai.ok) return NextResponse.json({ status: "blocked", message: ai.message, outside: ai.outside, why: "The AI's answer mentioned an address the treasury doesn't own, so it was thrown away." });
 
       const spend = await spendableNear(t.dao);
-      const transferNear = Math.round(Math.min(demo.payrollTransferNear, spend) * 100) / 100;
+      // The suggestion moves the FULL gap the advice names (never a token amount).
+      const transferNear = gapNear(health, t.demo.demoNearUsdPrice);
+      const canAfford = transferNear <= spend + 1e-9;
       const attestationHash = createHash("sha256").update(JSON.stringify({ model, nonce: pre.nonce, checkedAt: last.checkedAt, checks: checks.map((c) => [c.id, c.status, c.details]) })).digest("hex");
       return NextResponse.json({
         status: "ok", health, quote, quoteUsdc, attestation: last, attestationHash,
         advice: { text: out.advice, model: out.model, responseHash: out.responseHash, requestHash: out.requestHash },
-        usage: out.usage, transferNear, transferUsd: transferNear * t.demo.demoNearUsdPrice, payrollAccount: t.payroll.accountId,
+        usage: out.usage, transferNear, canAfford, spendableNear: Math.round(spend * 100) / 100, transferUsd: transferNear * t.demo.demoNearUsdPrice, payrollAccount: t.payroll.accountId,
         totalNear: totalNear(t),
       });
     }
