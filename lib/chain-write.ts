@@ -6,6 +6,7 @@ import { Account, actions, nearToYocto } from "near-api-js";
 import { RPC_URL } from "./near";
 import { getProposal } from "./sputnik";
 import { env } from "./env";
+import { buildRegisterKind, buildSwapKind, type ParsedSwap } from "./swap-proposal";
 
 const TGAS = 10n ** 12n;
 
@@ -19,16 +20,16 @@ function successValue(outcome: any): unknown {
   try { return JSON.parse(Buffer.from(v, "base64").toString("utf8")); } catch { return undefined; }
 }
 
-/** The agent files a NEAR Transfer proposal to a DAO-owned receiver. Returns the new proposal id + tx hash. */
-export async function fileTransferProposal(args: { dao: string; receiver: string; amountNear: number; description: string }) {
+/** The agent files a proposal with its add_proposal-only key. Returns the new proposal id + tx hash. */
+async function addProposal(dao: string, description: string, kind: unknown) {
   const id = env("AGENT_ACCOUNT_ID"), key = env("AGENT_FUNCTION_CALL_PRIVATE_KEY");
   if (!id || !key) throw new Error("The Coinsel agent isn't set up on this server (AGENT_ACCOUNT_ID / AGENT_FUNCTION_CALL_PRIVATE_KEY).");
   const outcome: any = await account(id, key).signAndSendTransaction({
-    receiverId: args.dao,
+    receiverId: dao,
     actions: [
       actions.functionCall(
         "add_proposal",
-        { proposal: { description: args.description, kind: { Transfer: { token_id: "", receiver_id: args.receiver, amount: nearToYocto(String(args.amountNear) as `${number}`).toString() } } } },
+        { proposal: { description, kind } },
         30n * TGAS,
         0n, // function-call keys cannot attach a deposit; the DAO's proposal bond is 0
       ),
@@ -38,6 +39,21 @@ export async function fileTransferProposal(args: { dao: string; receiver: string
   const proposalId = successValue(outcome);
   if (typeof proposalId !== "number") throw new Error("The DAO did not accept the proposal.");
   return { proposalId, txHash: String(outcome.transaction_outcome?.id ?? outcome.transaction?.hash ?? "") };
+}
+
+/** The agent files a NEAR Transfer proposal to a DAO-owned receiver. */
+export async function fileTransferProposal(args: { dao: string; receiver: string; amountNear: number; description: string }) {
+  return addProposal(args.dao, args.description, { Transfer: { token_id: "", receiver_id: args.receiver, amount: nearToYocto(String(args.amountNear) as `${number}`).toString() } });
+}
+
+/** Step 2: the agent files the swap-deposit proposal. The council still has to approve it; the agent can only ask. */
+export async function fileSwapProposal(args: { dao: string; swap: ParsedSwap; description: string }) {
+  return addProposal(args.dao, args.description, buildSwapKind(args.swap));
+}
+
+/** Setup: the agent asks the council to register the DAO on a Tidepool token contract (the DAO pays 0.00125 NEAR if approved). */
+export async function fileRegisterProposal(args: { dao: string; tokenContract: string; description: string }) {
+  return addProposal(args.dao, args.description, buildRegisterKind(args.tokenContract, args.dao));
 }
 
 /** DEMO RESET: the payroll account sends NEAR back to the DAO. The destination is always the DAO; nothing else can be signed here. */
@@ -57,10 +73,10 @@ export function demoCouncil(): { index: number; accountId: string; key: string }
 }
 
 /** DEMO MODE: a demo council member approves. In real use each member signs with their own wallet. */
-export async function approveAsCouncil(dao: string, proposalId: number, member: { accountId: string; key: string }) {
+export async function approveAsCouncil(dao: string, proposalId: number, member: { accountId: string; key: string }, tgas = 100n) {
   const outcome: any = await account(member.accountId, member.key).signAndSendTransaction({
     receiverId: dao,
-    actions: [actions.functionCall("act_proposal", { id: proposalId, action: "VoteApprove" }, 100n * TGAS, 0n)],
+    actions: [actions.functionCall("act_proposal", { id: proposalId, action: "VoteApprove" }, tgas * TGAS, 0n)],
     waitUntil: "FINAL",
   });
   return { txHash: String(outcome.transaction_outcome?.id ?? "") };

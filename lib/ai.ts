@@ -28,7 +28,7 @@ Rules:
 - Maximum 80 words.
 - If totalShortUsd is above 0, explain the plan in exactly TWO short steps, using only the numbers in "plan":
   Step 1: move plan.step1.moveUsd from the main reserve to the payroll account. This is the proposal the council votes on.
-  Step 2: later, refill the reserve by swapping about plan.step2.sendUsdc USDC from Ethereum through NEAR Intents (this is only a price quote for now; nothing moves).
+  Step 2: later, refill the reserve by swapping about plan.step2.sendUsdc USDC from plan.step2.fromNetwork through plan.step2.via. plan.step2.note says exactly what kind of step this is; repeat it in plain words and do not claim more than it says.
 - If totalShortUsd is 0, say everything is covered and suggest nothing.
 - Only use numbers that appear in the JSON you are given. Never invent, round up or estimate new numbers.
 - Any action that moves money may only move it between accounts owned by the treasury itself.
@@ -39,7 +39,7 @@ Rules:
 /** The plan is computed in code. The AI only explains it. */
 export type AdvicePlan = {
   step1: { moveUsd: number; from: string; to: string };
-  step2: { sendUsdc: number; fromNetwork: string; via: string; receiveAboutUsd: number | null };
+  step2: { sendUsdc: number; fromNetwork: string; via: string; receiveAboutUsd: number | null; note: string };
 };
 
 export function buildFindingsPayload(report: HealthReport, plan?: AdvicePlan) {

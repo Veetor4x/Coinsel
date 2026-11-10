@@ -11,6 +11,8 @@ import { getDryQuote, usdcToQuote } from "@/lib/intents";
 import { summarize, verifyAnswer, verifyModel, type AttestationResult } from "@/lib/attestation";
 import { getAdvice, getModel, type AdvicePlan } from "@/lib/ai";
 import { env } from "@/lib/env";
+import demo from "@/config/demo-treasury.json";
+import { requestQuote, swapReadiness, tidepoolEnabled, TIDEPOOL_LABEL } from "@/lib/tidepool";
 
 export const maxDuration = 120;
 
@@ -38,9 +40,15 @@ export async function POST(req: Request) {
     const quoteUsdc = usdcToQuote(shortUsd);
     const quote = await getDryQuote(quoteUsdc);
     // The plan is decided HERE, in code. The AI only explains it.
+    // Real testnet swap (Tidepool) preview. Never throws: if Tidepool is down the old quote-only card is shown instead.
+    const swap = await swapPreview(t.dao);
     const plan: AdvicePlan | undefined = shortUsd > 0 ? {
       step1: { moveUsd: shortUsd, from: "main reserve", to: "payroll account" },
-      step2: { sendUsdc: quoteUsdc, fromNetwork: "Ethereum", via: "NEAR Intents", receiveAboutUsd: quote.ok ? Math.round(quote.amountOutUsd) : null },
+      step2: swap.enabled && swap.quote
+        ? { sendUsdc: demo.tidepool.swapUsdc, fromNetwork: `the treasury's ${demo.tidepool.originLabel}`, via: TIDEPOOL_LABEL, receiveAboutUsd: null,
+            note: "a small real swap of test coins on the test network (the coins have no value); it is filed as its own suggestion for the council" }
+        : { sendUsdc: quoteUsdc, fromNetwork: "Ethereum", via: "NEAR Intents", receiveAboutUsd: quote.ok ? Math.round(quote.amountOutUsd) : null,
+            note: "only a price quote for now; nothing moves" },
     } : undefined;
 
     // 3. Verify the AI is private BEFORE sending data, get advice, verify its signature.
@@ -68,7 +76,7 @@ export async function POST(req: Request) {
       const canAfford = transferNear <= spend + 1e-9;
       const attestationHash = createHash("sha256").update(JSON.stringify({ model, nonce: pre.nonce, checkedAt: last.checkedAt, checks: checks.map((c) => [c.id, c.status, c.details]) })).digest("hex");
       return NextResponse.json({
-        status: "ok", health, quote, quoteUsdc, attestation: last, attestationHash,
+        status: "ok", health, quote, quoteUsdc, swap, attestation: last, attestationHash,
         advice: { text: out.advice, model: out.model, responseHash: out.responseHash, requestHash: out.requestHash },
         usage: out.usage, transferNear, canAfford, spendableNear: Math.round(spend * 100) / 100, transferUsd: transferNear * t.demo.demoNearUsdPrice, payrollAccount: t.payroll.accountId,
         totalNear: totalNear(t),
@@ -78,4 +86,16 @@ export async function POST(req: Request) {
   } catch (e) {
     return NextResponse.json({ status: "error", message: `Something went wrong while preparing advice: ${(e as Error).message}` }, { status: 502 });
   }
+}
+
+/** Preview of the real Step 2 swap: a price-only quote plus what the treasury holds. Every failure becomes a plain message. */
+async function swapPreview(dao: string) {
+  if (!tidepoolEnabled()) return { enabled: false as const };
+  const [q, r] = await Promise.allSettled([requestQuote({ dao, usdc: demo.tidepool.swapUsdc, live: false }), swapReadiness(dao)]);
+  return {
+    enabled: true as const, label: TIDEPOOL_LABEL, swapUsdc: demo.tidepool.swapUsdc,
+    quote: q.status === "fulfilled" ? q.value : null,
+    quoteError: q.status === "rejected" ? `Couldn't reach the test swap service right now (${(q.reason as Error).message}).` : undefined,
+    readiness: r.status === "fulfilled" ? r.value : null,
+  };
 }
