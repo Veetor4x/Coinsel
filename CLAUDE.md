@@ -111,3 +111,9 @@ NEAR_NETWORK, NEAR_RPC_URL, DAO_ACCOUNT_ID, AGENT_ACCOUNT_ID, AGENT_FUNCTION_CAL
 ## Day 2 decisions (2026-11-10)
 - Health engine (`lib/engine.ts`) works in USD. NEAR is converted with the fixed demo price. Each payout can only be paid from money on its own network; payouts are paid in date order. "Idle" = not needed for any payout in the next 30 days.
 - AI model shortlist (NEAR AI Cloud, TEE): see PR notes. Preferred: `deepseek-ai/DeepSeek-V4.1-Flash-1017` (NEAR AI's own attested TEE). Not chosen/built yet.
+
+## Day 3 decisions (2026-11-10)
+- Full loop built: /api/analyze (guard → engine → 1Click dry quote → verify attestation, auto-retry once → advice), /api/propose (agent files Transfer to payroll account), /api/demo-vote (DEMO_MODE council signing). Fail-closed on attestation.
+- Attestation: real DCAP verification via `@phala/dcap-qvl` + nonce/signer binding + RTMR3 replay + MRCONFIGID + NVIDIA NRAS. Model default `deepseek-ai/DeepSeek-V4.1-Flash-1017`. Response-signature check NOT done.
+- Payroll account `coinselx69t-payroll.testnet` (DAO-owned, in config). Treasury total = DAO + payroll NEAR. DAO storage locks ~5.4 NEAR, so transfers are 0.1 NEAR; refill DAO from faucet.
+- 1Click quote: USDC(eth)→wNEAR, dry:true, no JWT, placeholder recipient `example.near` (testnet addresses are rejected).

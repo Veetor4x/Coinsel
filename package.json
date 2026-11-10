@@ -12,9 +12,11 @@
     "setup:accounts": "tsx scripts/create-accounts.ts",
     "setup:dao": "tsx scripts/create-dao.ts",
     "setup:agent-key": "tsx scripts/add-agent-key.ts",
-    "setup:check": "tsx scripts/check-policy.ts"
+    "setup:check": "tsx scripts/check-policy.ts",
+    "setup:payroll": "tsx scripts/create-payroll.ts"
   },
   "dependencies": {
+    "@phala/dcap-qvl": "^0.7.1",
     "dotenv": "^18.0.10",
     "near-api-js": "^7.4.0",
     "next": "16.4.5",
