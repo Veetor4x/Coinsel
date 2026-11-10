@@ -111,3 +111,10 @@ NEAR_NETWORK, NEAR_RPC_URL, DAO_ACCOUNT_ID, AGENT_ACCOUNT_ID, AGENT_FUNCTION_CAL
 ## Day 2 decisions (2026-11-10)
 - Health engine (`lib/engine.ts`) works in USD. NEAR is converted with the fixed demo price. Each payout can only be paid from money on its own network; payouts are paid in date order. "Idle" = not needed for any payout in the next 30 days.
 - AI model shortlist (NEAR AI Cloud, TEE): see PR notes. Preferred: `deepseek-ai/DeepSeek-V4.1-Flash-1017` (NEAR AI's own attested TEE). Not chosen/built yet.
+
+## Day 2 part 2 decisions (2026-11-10)
+- Default AI model in code: `deepseek-ai/DeepSeek-V4.1-Flash-1017` (override with NEARAI_MODEL; fallback `deepseek/deepseek-v3.2`). Base URL defaults to https://cloud-api.near.ai/v1.
+- Flow in `/api/analyze`: (1) verify attestation with a fresh nonce BEFORE sending anything; if not "verified", nothing is sent (fail-closed). (2) ask for advice. (3) verify the answer's `provider_tee` signature against the verified model key.
+- Verification follows docs.near.ai/cloud/verification: Intel TDX quote via `@phala/dcap-qvl` (TCB must be UpToDate, debug off), nonce + signer bound in report_data, MRCONFIGID = app_compose hash, RTMR3 event-log replay, NVIDIA NRAS GPU verdict, gateway report too. TLS-binding and image-provenance checks are NOT done (documented as not included).
+- Only engine numbers + sanitised payout labels go to the AI. Obligation notes, ids, accounts and keys never do.
+- One analysis ≈ 800–900 tokens ≈ $0.0006.

@@ -141,7 +141,7 @@ export function analyze(balances: Balance[], obligations: Obligation[]): HealthR
     findings.push({
       id: "shortfall",
       severity: "critical",
-      title: `Payroll is short in ${days(first.dueInDays)}`.replace("Payroll", sameDay.length > 1 ? "Payouts" : "A payout"),
+      title: `${sameDay.length > 1 ? "Payouts are" : "A payout is"} short in ${days(first.dueInDays)}`,
       detail: `${sameDay.length > 1 ? `${sameDay.length} payouts` : "A payout"} due in ${days(first.dueInDays)} can't be fully paid. We're short by ${usd(dayShort)}${shortfalls.length > sameDay.length ? ` (${usd(shortTotal)} across all upcoming payouts)` : ""}.`,
     });
   } else if (obs.length) {
