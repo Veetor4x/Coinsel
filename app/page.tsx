@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
+import { analyze, type Balance, type Severity } from "@/lib/engine";
 
 type Obligation = { id: string; label: string; amountNear: number; dueInDays: number; kind: string; note: string };
 type Data = {
@@ -15,16 +16,40 @@ const near = (n: number) => `${n.toLocaleString("en-US", { maximumFractionDigits
 const short = (id: string) => (id.length > 26 ? id.slice(0, 12) + "…" + id.slice(-12) : id);
 const nb = (id: string) => `https://testnet.nearblocks.io/address/${id}`;
 
+function Logo() {
+  return (
+    <svg width="36" height="36" viewBox="0 0 36 36" aria-hidden="true">
+      <path d="M18 4a14 14 0 1 0 13.6 10.8" fill="none" stroke="#F2F2EE" strokeWidth="2" strokeLinecap="round" opacity=".85" />
+      <circle cx="18" cy="18" r="5" fill="#C6FF3D" />
+      <circle cx="30" cy="9" r="2.4" fill="#C6FF3D" />
+    </svg>
+  );
+}
 function Badge({ kind }: { kind: "real" | "demo" }) {
   return kind === "real" ? (
-    <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-400">Real · NEAR testnet</span>
+    <span className="rounded-full border border-[#C6FF3D]/40 bg-[#C6FF3D]/10 px-2 py-0.5 text-[11px] font-medium text-[#C6FF3D]">Real · test network</span>
   ) : (
-    <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-400">Demo data (not on-chain)</span>
+    <span className="rounded-full border border-[#FFC56E]/40 bg-[#FFC56E]/10 px-2 py-0.5 text-[11px] font-medium text-[#FFC56E]">Demo data</span>
+  );
+}
+const TONE: Record<Severity, string> = {
+  critical: "border-[#FF9A82]/40 bg-[#FF9A82]/10 text-[#FF9A82]",
+  warning: "border-[#FFC56E]/40 bg-[#FFC56E]/10 text-[#FFC56E]",
+  info: "border-white/10 bg-white/5 text-zinc-200",
+  ok: "border-[#C6FF3D]/40 bg-[#C6FF3D]/10 text-[#C6FF3D]",
+};
+function Stat({ label, value, tone }: { label: string; value: string; tone: "good" | "warn" | "bad" | "neutral" }) {
+  const c = { good: "text-[#C6FF3D]", warn: "text-[#FFC56E]", bad: "text-[#FF9A82]", neutral: "text-zinc-100" }[tone];
+  return (
+    <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+      <div className="text-xs text-zinc-500">{label}</div>
+      <div className={`text-2xl font-semibold ${c}`}>{value}</div>
+    </div>
   );
 }
 function Card({ title, right, children, className = "" }: { title: string; right?: React.ReactNode; children: React.ReactNode; className?: string }) {
   return (
-    <section className={`rounded-2xl border border-white/10 bg-zinc-900/60 p-5 ${className}`}>
+    <section className={`rounded-2xl border border-[#262A2E] bg-[#121315] p-5 ${className}`}>
       <div className="mb-4 flex items-center justify-between gap-2">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400">{title}</h2>
         {right}
@@ -61,20 +86,33 @@ export default function Home() {
     return { price, bal, totalDue, first, dueAtFirst, shortBy: Math.max(0, dueAtFirst - bal), otherUsd, realUsd: bal * price };
   }, [data, obs]);
 
+  const health = useMemo(() => {
+    if (!data) return null;
+    const price = data.demo.demoNearUsdPrice;
+    const balances: Balance[] = [
+      { chain: "NEAR", symbol: "NEAR", amount: data.onChain.nearBalance, usdValue: data.onChain.nearBalance * price, source: "real" },
+      ...data.onChain.tokens.map((t): Balance => ({ chain: "NEAR", symbol: t.symbol, amount: t.amount, usdValue: 0, source: "real" })),
+      ...data.demo.otherChainBalances.map((b): Balance => ({ chain: b.chain, symbol: b.symbol, amount: b.amount, usdValue: b.usdValue, source: "demo" })),
+    ];
+    return analyze(balances, obs.map((o) => ({ id: o.id, label: o.label, amountUsd: (+o.amountNear || 0) * price, dueInDays: o.dueInDays, chain: "NEAR" })));
+  }, [data, obs]);
+
   const update = (id: string, patch: Partial<Obligation>) => setObs((l) => l.map((o) => (o.id === id ? { ...o, ...patch } : o)));
   const add = () => setObs((l) => [...l, { id: "new-" + Date.now(), label: "New payout", amountNear: 1, dueInDays: 14, kind: "payroll", note: "" }]);
-  const input = "w-full rounded-md border border-white/10 bg-zinc-950 px-2 py-1 text-sm text-zinc-100 outline-none focus:border-emerald-500/60";
+  const input = "w-full rounded-md border border-white/10 bg-zinc-950 px-2 py-1 text-sm text-zinc-100 outline-none focus:border-[#C6FF3D]/60";
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-8">
       <header className="mb-8 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-4xl font-bold tracking-tight">Coin<span className="text-emerald-400">sel</span></h1>
-          <p className="mt-1 text-zinc-400">Counsel for your coins. Never control.</p>
+          <h1 className="flex items-center gap-3 font-[family-name:var(--font-syne)] text-2xl font-extrabold tracking-[0.45em] text-[#F2F2EE] sm:text-3xl">
+            <Logo />C O I N S E L
+          </h1>
+          <p className="mt-2 text-zinc-400">Counsel for your coins. Never control.</p>
         </div>
         <div className="flex items-center gap-3 text-sm">
           <span className="rounded-full border border-white/10 px-3 py-1 text-zinc-400">NEAR {data?.network ?? "testnet"}</span>
-          {data && <a className="rounded-full border border-emerald-500/40 px-3 py-1 text-emerald-400 hover:bg-emerald-500/10" href={data.explorerUrl} target="_blank" rel="noreferrer">{short(data.dao)} ↗</a>}
+          {data && <a className="rounded-full border border-[#C6FF3D]/40 px-3 py-1 text-[#C6FF3D] hover:bg-[#C6FF3D]/10" href={data.explorerUrl} target="_blank" rel="noreferrer">{short(data.dao)} ↗</a>}
         </div>
       </header>
 
@@ -83,22 +121,22 @@ export default function Home() {
           {error} <button onClick={load} className="ml-2 underline">Retry</button>
         </div>
       )}
-      {!data && !error && <p className="text-zinc-500">Reading the treasury from NEAR testnet…</p>}
+      {!data && !error && <p className="text-zinc-500">Reading the treasury…</p>}
 
       {data && calc && (
         <div className="grid gap-5 md:grid-cols-3">
           <Card title="Total treasury" className="md:col-span-1" right={<Badge kind="real" />}>
             <div className="text-4xl font-semibold">{usd(calc.realUsd)}</div>
-            <p className="mt-1 text-sm text-zinc-400">{near(calc.bal)} on-chain × ${calc.price} <span className="text-amber-400">(fixed demo price)</span></p>
+            <p className="mt-1 text-sm text-zinc-400">{near(calc.bal)} on-chain × ${calc.price} <span className="text-[#FFC56E]">(fixed demo price)</span></p>
             <div className="mt-4 border-t border-white/10 pt-3 text-sm text-zinc-400">
-              + {usd(calc.otherUsd)} idle USDC on Ethereum <span className="text-amber-400">(demo, not counted above)</span>
+              + {usd(calc.otherUsd)} of USDC on Ethereum <span className="text-[#FFC56E]">(demo money, not counted above)</span>
               <div className="mt-1 text-zinc-200">Combined: {usd(calc.realUsd + calc.otherUsd)}</div>
             </div>
           </Card>
 
-          <Card title="Balances by chain" className="md:col-span-2">
+          <Card title="Money by network" className="md:col-span-2">
             <table className="w-full text-sm">
-              <thead className="text-left text-xs text-zinc-500"><tr><th className="pb-2">Chain</th><th>Asset</th><th className="text-right">Amount</th><th className="text-right">Source</th></tr></thead>
+              <thead className="text-left text-xs text-zinc-500"><tr><th className="pb-2">Network</th><th>Asset</th><th className="text-right">Amount</th><th className="text-right">Source</th></tr></thead>
               <tbody className="divide-y divide-white/5">
                 <tr><td className="py-2">NEAR testnet</td><td>NEAR</td><td className="text-right">{calc.bal.toLocaleString("en-US", { maximumFractionDigits: 3 })}</td><td className="text-right"><Badge kind="real" /></td></tr>
                 {data.onChain.tokens.map((t) => (
@@ -111,8 +149,8 @@ export default function Home() {
             </table>
           </Card>
 
-          <Card title="Upcoming obligations" className="md:col-span-2" right={<Badge kind="demo" />}>
-            {obs.length === 0 && <p className="text-sm text-zinc-500">No obligations yet.</p>}
+          <Card title="Upcoming payouts" className="md:col-span-2" right={<Badge kind="demo" />}>
+            {obs.length === 0 && <p className="text-sm text-zinc-500">No payouts yet.</p>}
             <div className="space-y-2">
               {obs.map((o) => (
                 <div key={o.id} className="grid grid-cols-12 items-center gap-2">
@@ -124,35 +162,55 @@ export default function Home() {
                 </div>
               ))}
             </div>
-            <div className="mt-1 grid grid-cols-12 gap-2 text-[11px] text-zinc-500"><span className="col-span-5">Label</span><span className="col-span-2">NEAR</span><span className="col-span-2">Due in (days)</span><span className="col-span-3">Note (untrusted text)</span></div>
+            <div className="mt-1 grid grid-cols-12 gap-2 text-[11px] text-zinc-500"><span className="col-span-5">Label</span><span className="col-span-2">NEAR</span><span className="col-span-2">Due in (days)</span><span className="col-span-3">Note</span></div>
             <div className="mt-4 flex items-center justify-between text-sm">
               <button onClick={add} className="rounded-lg border border-white/15 px-3 py-1.5 hover:bg-white/5">+ Add payout</button>
-              <span className="text-zinc-400">Total {near(calc.totalDue)} · edits live in your browser only</span>
+              <span className="text-zinc-400">Total {near(calc.totalDue)} · changes stay in your browser only</span>
             </div>
           </Card>
 
           <Card title="Council" right={<Badge kind="real" />}>
             <div className="text-3xl font-semibold">{data.council.threshold} of {data.council.members.length}</div>
-            <p className="mb-3 text-sm text-zinc-400">approvals needed to execute</p>
+            <p className="mb-3 text-sm text-zinc-400">approvals needed before anything happens</p>
             <ul className="space-y-1 text-sm">
-              {data.council.members.map((m) => <li key={m}><a className="text-zinc-300 hover:text-emerald-400" href={nb(m)} target="_blank" rel="noreferrer">{short(m)} ↗</a></li>)}
+              {data.council.members.map((m) => <li key={m}><a className="text-zinc-300 hover:text-[#C6FF3D]" href={nb(m)} target="_blank" rel="noreferrer">{short(m)} ↗</a></li>)}
             </ul>
             <p className="mt-3 border-t border-white/10 pt-3 text-xs text-zinc-500">
-              Coinsel agent <span className="text-zinc-300">{data.council.agent.map(short).join(", ") || "—"}</span> can only <b>add proposals</b>. It cannot vote or move funds.
+              Coinsel agent <span className="text-zinc-300">{data.council.agent.map(short).join(", ") || "—"}</span> can only <b>suggest</b>. It can&apos;t send money.
             </p>
           </Card>
 
-          <Card title="Health" className="md:col-span-3" right={<span className="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-zinc-500">Coming Day 2</span>}>
-            <p className="text-sm text-zinc-400">
-              Quick look (not the health engine yet): the first payouts are due in <b className="text-zinc-200">{calc.first ?? "–"} days</b> and total{" "}
-              <b className="text-zinc-200">{near(calc.dueAtFirst)}</b> against <b className="text-zinc-200">{near(calc.bal)}</b> on-chain
-              {calc.shortBy > 0 ? <> → <b className="text-red-400">short by {near(calc.shortBy)}</b>.</> : <> → <b className="text-emerald-400">covered</b>.</>}
-            </p>
-            <p className="mt-2 text-xs text-zinc-600">Runway, shortfall dates, idle funds and private AI advice arrive with the health engine.</p>
+          <Card title="Health check" className="md:col-span-3" right={<span className="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-zinc-500">Plain maths, no AI</span>}>
+            {health && (
+              <>
+                <div className="mb-4 grid gap-3 sm:grid-cols-3">
+                  <Stat label="Money lasts" value={health.runwayDays === null ? "No payouts due" : `${health.runwayDays} days`} tone={health.shortfalls.length ? "bad" : health.runwayDays !== null && health.runwayDays < 30 ? "warn" : "good"} />
+                  <Stat label="Can't be paid yet" value={health.shortfalls.length ? usd(health.shortfalls.reduce((s, x) => s + x.shortUsd, 0)) : "Nothing"} tone={health.shortfalls.length ? "bad" : "good"} />
+                  <Stat label="Sitting unused" value={usd(health.totalIdleUsd)} tone="neutral" />
+                </div>
+                <ul className="space-y-2">
+                  {health.findings.map((f) => (
+                    <li key={f.id} className={`rounded-xl border p-3 ${TONE[f.severity]}`}>
+                      <div className="text-sm font-semibold">{f.title}</div>
+                      <div className="text-sm opacity-90">{f.detail}</div>
+                    </li>
+                  ))}
+                </ul>
+                {health.shortfalls.length > 0 && (
+                  <details className="mt-3 text-xs text-zinc-500">
+                    <summary className="cursor-pointer">Details</summary>
+                    <ul className="mt-2 space-y-1">
+                      {health.shortfalls.map((s) => <li key={s.obligationId}>{s.label}: due in {s.dueInDays} days, needs {usd(s.amountUsd)}, {usd(s.availableUsd)} left → short {usd(s.shortUsd)}</li>)}
+                    </ul>
+                    <p className="mt-2">Payouts are paid in date order, each from money on its own network. Prices use the fixed demo rate.</p>
+                  </details>
+                )}
+              </>
+            )}
           </Card>
 
-          <Card title="Recent proposals" className="md:col-span-3" right={<Badge kind="real" />}>
-            {data.proposals.length === 0 ? <p className="text-sm text-zinc-500">No proposals yet. Coinsel will file the first one on Day 3.</p> : (
+          <Card title="Recent suggestions" className="md:col-span-3" right={<Badge kind="real" />}>
+            {data.proposals.length === 0 ? <p className="text-sm text-zinc-500">No suggestions filed yet.</p> : (
               <ul className="divide-y divide-white/5 text-sm">
                 {data.proposals.map((p) => (
                   <li key={p.id} className="flex justify-between gap-3 py-2"><span className="truncate">#{p.id} · {p.kind} · {p.description}</span><span className="text-zinc-400">{p.status}</span></li>
@@ -162,7 +220,7 @@ export default function Home() {
           </Card>
         </div>
       )}
-      <footer className="mt-10 text-xs text-zinc-600">Testnet only. Coinsel holds no keys to funds; its only on-chain permission is add_proposal. Yellow badges mark mocked data.</footer>
+      <footer className="mt-10 text-xs text-zinc-600">Test network only. Coinsel can only suggest — it can&apos;t send money. Yellow badges mark demo data.</footer>
     </div>
   );
 }
