@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import demo from "@/config/demo-treasury.json";
 import { checkDestination, checkObligations, checkText } from "@/lib/guard";
 import { parseObligations } from "@/lib/obligations";
-import { loadTreasury, spendableNear } from "@/lib/treasury";
+import { loadTreasury } from "@/lib/treasury";
 import { analyze } from "@/lib/engine";
 import { gapNear, toEngineInputs } from "@/lib/engine-inputs";
 import { getDryQuote, usdcToQuote } from "@/lib/intents";
@@ -29,16 +29,16 @@ export async function POST(req: Request) {
   if (bad && !bad.ok) return NextResponse.json({ status: "blocked", message: bad.message, outside: bad.outside }, { status: 403 });
 
   try {
-    const spend = await spendableNear(dao);
     // Recomputed here from the chain + the payouts, so it always equals the gap the advice named.
     const t = await loadTreasury();
+    const spend = t.reserve.spendableNear;
     const { balances, obligations } = toEngineInputs(t, obs);
-    const amountNear = gapNear(analyze(balances, obligations), demo.demoNearUsdPrice);
-    if (amountNear <= 0) return NextResponse.json({ error: "Nothing is short right now, so there is nothing to file." }, { status: 409 });
-    if (amountNear > spend + 1e-9) return NextResponse.json({ error: `The main account can only spare ${spend.toFixed(2)} NEAR but the gap is ${amountNear} NEAR. Top it up from the test faucet, then try again.` }, { status: 409 });
-    // Same size as the quote the advice quoted, so the numbers the council reads agree.
-    const q = Number(b?.quoteUsdc);
-    const quote = await getDryQuote(Number.isFinite(q) && q >= 1 && q <= 100000 ? q : usdcToQuote(12));
+    const health = analyze(balances, obligations);
+    const amountNear = gapNear(health, demo.demoNearUsdPrice);
+    if (amountNear <= 0) return NextResponse.json({ error: "Payroll is already covered, so there is nothing to file." }, { status: 409 });
+    if (amountNear > spend + 1e-9) return NextResponse.json({ error: `The main reserve can only spare ${spend.toFixed(2)} NEAR but the gap is ${amountNear} NEAR. Top it up from the test faucet, then try again.` }, { status: 409 });
+    // Step 2 is sized from the same gap (never from the browser), so every number agrees.
+    const quote = await getDryQuote(usdcToQuote(health.gapUsd));
     const description = buildDescription({
       advice: text, amountNear, amountUsd: amountNear * demo.demoNearUsdPrice, receiver: demo.payrollAccountId, quote,
       model: String(b.advice.model ?? "").slice(0, 80), responseHash: b.advice.responseHash, attestationHash: b.attestationHash,

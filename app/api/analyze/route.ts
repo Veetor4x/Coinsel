@@ -6,10 +6,10 @@ import { analyze } from "@/lib/engine";
 import { gapNear, toEngineInputs, totalNear } from "@/lib/engine-inputs";
 import { parseObligations } from "@/lib/obligations";
 import { checkObligations, checkText } from "@/lib/guard";
-import { loadTreasury, spendableNear } from "@/lib/treasury";
+import { loadTreasury } from "@/lib/treasury";
 import { getDryQuote, usdcToQuote } from "@/lib/intents";
 import { summarize, verifyAnswer, verifyModel, type AttestationResult } from "@/lib/attestation";
-import { getAdvice, getModel } from "@/lib/ai";
+import { getAdvice, getModel, type AdvicePlan } from "@/lib/ai";
 
 export const maxDuration = 120;
 
@@ -33,9 +33,14 @@ export async function POST(req: Request) {
     const health = analyze(balances, obligations);
 
     // 2. Real price quote for the cross-chain step (dry run). Sized in demo-scale USD.
-    const shortUsd = health.shortfalls.reduce((s, x) => s + x.shortUsd, 0);
+    const shortUsd = health.gapUsd;
     const quoteUsdc = usdcToQuote(shortUsd);
     const quote = await getDryQuote(quoteUsdc);
+    // The plan is decided HERE, in code. The AI only explains it.
+    const plan: AdvicePlan | undefined = shortUsd > 0 ? {
+      step1: { moveUsd: shortUsd, from: "main reserve", to: "payroll account" },
+      step2: { sendUsdc: quoteUsdc, fromNetwork: "Ethereum", via: "NEAR Intents", receiveAboutUsd: quote.ok ? Math.round(quote.amountOutUsd) : null },
+    } : undefined;
 
     // 3. Verify the AI is private BEFORE sending data, get advice, verify its signature.
     // Auto-retry once; still fail-closed (no unverified advice is ever returned).
@@ -46,7 +51,7 @@ export async function POST(req: Request) {
       last = pre.result;
       if (pre.result.status !== "verified") continue; // nothing was sent to the AI
       let out;
-      try { out = await getAdvice(health, apiKey); } catch { continue; }
+      try { out = await getAdvice(health, apiKey, fetch, plan); } catch { continue; }
       const signed = await verifyAnswer(out.model, out, pre.signer, apiKey);
       const checks = [...pre.result.checks, signed];
       const { status, headline } = summarize(checks);
@@ -56,7 +61,7 @@ export async function POST(req: Request) {
       const ai = checkText(out.advice);
       if (!ai.ok) return NextResponse.json({ status: "blocked", message: ai.message, outside: ai.outside, why: "The AI's answer mentioned an address the treasury doesn't own, so it was thrown away." });
 
-      const spend = await spendableNear(t.dao);
+      const spend = t.reserve.spendableNear;
       // The suggestion moves the FULL gap the advice names (never a token amount).
       const transferNear = gapNear(health, t.demo.demoNearUsdPrice);
       const canAfford = transferNear <= spend + 1e-9;

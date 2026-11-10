@@ -27,6 +27,7 @@ const usd = (n: number) => n.toLocaleString("en-US", { style: "currency", curren
 const near = (n: number) => `${n.toLocaleString("en-US", { maximumFractionDigits: 2 })} NEAR`;
 const short = (id: string) => (id.length > 26 ? id.slice(0, 12) + "…" + id.slice(-12) : id);
 const SHOWN_SUGGESTIONS = 3;
+const deadline = () => Date.now() + 30000;
 const nb = (id: string) => `https://testnet.nearblocks.io/address/${id}`;
 const mono = "font-[family-name:var(--font-mono-jb)]";
 
@@ -76,7 +77,9 @@ export default function Home() {
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [obs, setObs] = useState<Obligation[]>([]); // client-side only, no database
-  const [busy, setBusy] = useState<null | "analyze" | "file" | number>(null);
+  const [busy, setBusy] = useState<null | "analyze" | "file" | "reset" | number>(null);
+  const [resetMsg, setResetMsg] = useState<string | null>(null);
+  const [topupFromServer, setTopupFromServer] = useState(false);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [filed, setFiled] = useState<Filed | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -90,11 +93,34 @@ export default function Home() {
     if (p.status !== "InProgress" && p.status !== k.status && !done) return p;
     return { ...p, status: done ? k.status : p.status, approvals: Math.max(p.approvals, k.approvals), voters: [...new Set([...p.voters, ...k.voters])] };
   };
+  // After a vote or reset we know what the payroll balance should become. A lagging chain read must not undo it.
+  const expectPayroll = useRef<{ near: number; until: number } | null>(null);
+  // Set the payroll balance to what it must become (absolute, so a read that already caught up is never counted twice).
+  const withPayroll = (d: Data, expected: number): Data => {
+    const diff = expected - d.payroll.nearBalance;
+    if (Math.abs(diff) < 0.01) return d;
+    return {
+      ...d,
+      payroll: { ...d.payroll, nearBalance: expected },
+      onChain: { ...d.onChain, nearBalance: d.onChain.nearBalance - diff },
+      reserve: { spendableNear: Math.max(0, d.reserve.spendableNear - diff) },
+    };
+  };
   const load = useCallback(() => {
     return fetch("/api/treasury", { cache: "no-store" }).then(async (r) => {
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Request failed");
-      setError(null); setData({ ...j, proposals: (j.proposals as Proposal[]).map(applyKnown) }); setObs((cur) => (cur.length ? cur : j.demo.obligations));
+      setError(null);
+      setData((prev) => {
+        let d: Data = { ...j, proposals: (j.proposals as Proposal[]).map(applyKnown) };
+        const e = expectPayroll.current;
+        if (e) {
+          if (Math.abs(j.payroll.nearBalance - e.near) < 0.01 || Date.now() > e.until) expectPayroll.current = null;
+          else if (prev) d = { ...d, payroll: prev.payroll, onChain: prev.onChain, reserve: prev.reserve };
+        }
+        return d;
+      });
+      setObs((cur) => (cur.length ? cur : j.demo.obligations));
     }).catch((e) => setError(e.message));
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -121,6 +147,27 @@ export default function Home() {
     return analyze(balances, obligations);
   }, [data, obs]);
 
+  // Not enough spare NEAR in the reserve to cover the starting gap (counting what a reset would send back).
+  const needsTopup = topupFromServer || (!!data && data.reserve.spendableNear + Math.max(0, data.payroll.nearBalance - data.demo.startingPayrollNear) + 1e-9 < data.demo.startingGapNear);
+  async function resetDemo() {
+    setBusy("reset"); setResetMsg(null); setNotice(null); setTopupFromServer(false);
+    try {
+      const r = await fetch("/api/reset-demo", { method: "POST" });
+      const j = await r.json();
+      if (j.status === "needs-topup") { setTopupFromServer(true); setResetMsg(j.why); return; }
+      if (j.status === "busy" || j.status === "error") { setResetMsg(j.message); return; }
+      // Back to the starting story: default payouts, no old advice.
+      known.current.clear(); setAnalysis(null); setFiled(null);
+      if (data) setObs(data.demo.obligations);
+      if (data && j.movedNear) {
+        const expectedNear = data.payroll.nearBalance - j.movedNear;
+        expectPayroll.current = { near: expectedNear, until: deadline() };
+        setData((d) => (d ? withPayroll(d, expectedNear) : d));
+      }
+      setResetMsg(j.status === "already" ? "Already at the starting point." : "Done — payroll is short again. Press “Get advice” to start.");
+      await load(); [2500, 6000].forEach((ms) => setTimeout(load, ms));
+    } catch (e) { setResetMsg((e as Error).message); } finally { setBusy(null); }
+  }
   const update = (id: string, patch: Partial<Obligation>) => setObs((l) => l.map((o) => (o.id === id ? { ...o, ...patch } : o)));
   const add = () => setObs((l) => [...l, { id: "new-" + Date.now(), label: "New payout", amountNear: 1, dueInDays: 14, kind: "payroll", note: "" }]);
   const input = "w-full rounded-md border border-white/10 bg-zinc-950 px-2 py-1 text-sm text-zinc-100 outline-none focus:border-[#C6FF3D]/60";
@@ -176,7 +223,14 @@ export default function Home() {
       const prev = data?.proposals.find((x) => x.id === proposalId);
       known.current.set(proposalId, { status: j.status, approvals: j.approvals, voters: [...(prev?.voters ?? []), ...(who ? [who] : [])] });
       // Update the card right now; the chain read below confirms it.
-      setData((d) => (d ? { ...d, proposals: d.proposals.map((x) => (x.id === proposalId ? applyKnown(x) : x)) } : d));
+      const moved = j.executed && prev?.amountNear ? prev.amountNear : 0;
+      const expectedNear = (data?.payroll.nearBalance ?? 0) + moved;
+      if (moved && data) expectPayroll.current = { near: expectedNear, until: deadline() };
+      setData((d) => {
+        if (!d) return d;
+        const n = { ...d, proposals: d.proposals.map((x) => (x.id === proposalId ? applyKnown(x) : x)) };
+        return moved ? withPayroll(n, expectedNear) : n;
+      });
       setNotice(j.executed ? "Approved by 2 of 3 — the transfer ran on the test network. Balances below are now updated." : `Council ${member} approved. ${j.approvals} of ${data?.council.threshold ?? 2} so far.`);
       await load();
       if (j.executed) [2500, 7000].forEach((ms) => setTimeout(load, ms)); // balances can lag a few seconds
@@ -242,8 +296,8 @@ export default function Home() {
             <div className="text-4xl font-semibold">{usd(calc.realUsd)}</div>
             <p className="mt-1 text-sm text-zinc-400">{near(calc.bal)} <span className="text-[#FFC56E]">(shown at demo scale)</span></p>
             <div className="mt-3 space-y-1 text-sm text-zinc-300">
-              <div className="flex justify-between"><span>Main account</span><span>{near(data.onChain.nearBalance)}</span></div>
-              <div className="flex justify-between"><span><a className="hover:text-[#C6FF3D]" href={data.payroll.explorerUrl} target="_blank" rel="noreferrer">Payroll account ↗</a></span><span>{near(data.payroll.nearBalance)}</span></div>
+              <div className="flex justify-between"><span>Main reserve</span><span>{near(data.onChain.nearBalance)}</span></div>
+              <div className="flex justify-between"><span><a className="hover:text-[#C6FF3D]" href={data.payroll.explorerUrl} target="_blank" rel="noreferrer">Payroll account (pays everyone) ↗</a></span><span>{near(data.payroll.nearBalance)}</span></div>
             </div>
             <div className="mt-4 border-t border-white/10 pt-3 text-sm text-zinc-400">
               + {usd(calc.otherUsd)} of USDC on Ethereum <span className="text-[#FFC56E]">(demo money, not counted above)</span>
@@ -253,7 +307,8 @@ export default function Home() {
 
           <Card title="Money by network" className="md:col-span-2">
             <ul className="divide-y divide-white/5 text-sm">
-              <li className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2"><span className="min-w-0">NEAR testnet · NEAR</span><span className="flex flex-wrap items-center gap-2"><span>{calc.bal.toLocaleString("en-US", { maximumFractionDigits: 3 })}</span><Badge kind="real" /></span></li>
+              <li className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2"><span className="min-w-0">NEAR testnet · payroll account</span><span className="flex flex-wrap items-center gap-2"><span>{data.payroll.nearBalance.toLocaleString("en-US", { maximumFractionDigits: 3 })}</span><Badge kind="real" /></span></li>
+              <li className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2"><span className="min-w-0">NEAR testnet · main reserve</span><span className="flex flex-wrap items-center gap-2"><span>{data.onChain.nearBalance.toLocaleString("en-US", { maximumFractionDigits: 3 })}</span><Badge kind="real" /></span></li>
               {data.onChain.tokens.map((t) => (
                 <li key={t.contractId} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2"><span className="min-w-0">NEAR testnet · {t.symbol}</span><span className="flex flex-wrap items-center gap-2"><span>{t.amount.toLocaleString()}</span><Badge kind="real" /></span></li>
               ))}
@@ -301,11 +356,13 @@ export default function Home() {
           <Card title="Health check" className="md:col-span-3" right={<span className="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-zinc-500">Plain maths, no AI</span>}>
             {health && (
               <>
-                <div className="mb-4 grid gap-3 sm:grid-cols-3">
-                  <Stat label="Money lasts" value={health.runwayDays === null ? "No payouts due" : `${health.runwayDays} days`} tone={health.shortfalls.length ? "bad" : health.runwayDays !== null && health.runwayDays < 30 ? "warn" : "good"} />
-                  <Stat label="Can't be paid yet" value={health.shortfalls.length ? usd(health.shortfalls.reduce((s, x) => s + x.shortUsd, 0)) : "Nothing"} tone={health.shortfalls.length ? "bad" : "good"} />
+                <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <Stat label="Payroll account" value={health.gapUsd > 0 ? `Short by ${usd(health.gapUsd)}` : "Covered"} tone={health.gapUsd > 0 ? "bad" : "good"} />
+                  <Stat label="Payroll money lasts" value={health.runwayDays === null ? "No payouts due" : `${health.runwayDays} days`} tone={health.shortfalls.length ? "bad" : health.runwayDays !== null && health.runwayDays < 30 ? "warn" : "good"} />
+                  <Stat label="Main reserve can spare" value={usd(health.reserveUsd)} tone={health.gapUsd > 0 && !health.reserveCoversGap ? "bad" : "neutral"} />
                   <Stat label="Sitting unused" value={usd(health.totalIdleUsd)} tone="neutral" />
                 </div>
+                <p className="mb-3 text-xs text-zinc-500">Payouts are paid from the payroll account: it holds {near(data.payroll.nearBalance)} and {near(calc.totalDue)} is due. The main reserve tops it up when needed.</p>
                 <ul className="space-y-2">
                   {health.findings.map((f) => (
                     <li key={f.id} className={`rounded-xl border p-3 ${TONE[f.severity]}`}>
@@ -369,23 +426,24 @@ export default function Home() {
                     <div className="mb-2 flex items-center gap-2 text-xs text-zinc-500"><span className={mono}>ADVICE</span><Badge kind="real">Written by private AI</Badge></div>
                     <p className="break-words text-[15px] leading-relaxed text-zinc-100">{a.advice.text}</p>
                   </div>
+                  <div className="mt-3 rounded-xl border border-[#C6FF3D]/30 bg-[#C6FF3D]/5 p-4 text-sm">
+                    <div className="mb-1 flex flex-wrap items-center gap-2"><span className="font-semibold">Step 1 · On the test network</span><Badge kind="real">Council votes</Badge></div>
+                    {a.transferNear > 0 ? (
+                      <p className="text-zinc-300">Move <b>{near(a.transferNear)}</b> <span className="text-[#FFC56E]">(≈ {usd(a.transferUsd)} at demo scale — exactly what payroll is short)</span> from the main reserve to the payroll account (<a className="underline" href={nb(a.payrollAccount)} target="_blank" rel="noreferrer">{short(a.payrollAccount)}</a>). It only goes to an account the treasury owns.</p>
+                    ) : <p className="text-zinc-300">Payroll is covered, so there is nothing to move.</p>}
+                    {!filed && a.transferNear > 0 && <button className={`${btn} mt-3`} disabled={busy !== null || !a.canAfford} onClick={() => fileIt(a)}>{busy === "file" ? "Filing…" : "File step 1 for the council"}</button>}
+                    {a.transferNear > 0 && !a.canAfford && <p className="mt-2 text-xs text-[#FFC56E]">Demo needs a top-up: the main reserve can only spare {near(a.spendableNear)} (the rest pays for storage), but the gap is {near(a.transferNear)}.</p>}
+                    {filed && (
+                      <p className="mt-3 text-zinc-200">Filed as suggestion <b>#{filed.proposalId}</b>. <a className="text-[#C6FF3D] underline" href={filed.txUrl} target="_blank" rel="noreferrer">See it on the explorer ↗</a><br /><span className="text-xs text-zinc-500">Now the council votes — see “Suggestions” below.</span></p>
+                    )}
+                  </div>
                   <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-4 text-sm">
-                    <div className="mb-1 flex flex-wrap items-center gap-2"><span className="font-semibold">Cross-network step</span><Badge kind="demo">Quote only</Badge></div>
+                    <div className="mb-1 flex flex-wrap items-center gap-2"><span className="font-semibold">Step 2 · Later, on another network</span><Badge kind="demo">Quote only</Badge></div>
+                    <p className="mb-1 text-zinc-400">Refill the main reserve from the idle USDC on Ethereum.</p>
                     {a.quote.ok ? (
                       <p className="text-zinc-300">{a.quote.amountInUsdc.toLocaleString("en-US")} USDC on Ethereum would become about <b>{usd(a.quote.amountOutUsd)}</b> of NEAR in about {a.quote.timeEstimateSec} seconds.</p>
                     ) : <p className="text-[#FFC56E]">{a.quote.error}</p>}
                     <p className="mt-1 text-xs text-zinc-500">{a.quote.label}</p>
-                  </div>
-                  <div className="mt-3 rounded-xl border border-[#C6FF3D]/30 bg-[#C6FF3D]/5 p-4 text-sm">
-                    <div className="font-semibold">The suggestion</div>
-                    {a.transferNear > 0 ? (
-                      <p className="mt-1 text-zinc-300">Move <b>{near(a.transferNear)}</b> <span className="text-[#FFC56E]">(≈ {usd(a.transferUsd)} at demo scale — the whole gap)</span> from the main account to the payroll account (<a className="underline" href={nb(a.payrollAccount)} target="_blank" rel="noreferrer">{short(a.payrollAccount)}</a>). It only goes to an account the treasury owns.</p>
-                    ) : <p className="mt-1 text-zinc-300">Nothing is short right now, so there is nothing to move.</p>}
-                    {!filed && a.transferNear > 0 && <button className={`${btn} mt-3`} disabled={busy !== null || !a.canAfford} onClick={() => fileIt(a)}>{busy === "file" ? "Filing…" : "File this suggestion for the council"}</button>}
-                    {a.transferNear > 0 && !a.canAfford && <p className="mt-2 text-xs text-[#FFC56E]">The main account can only spare {near(a.spendableNear)} (the rest pays for storage), but the gap is {near(a.transferNear)}. Top it up from the test faucet.</p>}
-                    {filed && (
-                      <p className="mt-3 text-zinc-200">Filed as suggestion <b>#{filed.proposalId}</b>. <a className="text-[#C6FF3D] underline" href={filed.txUrl} target="_blank" rel="noreferrer">See it on the explorer ↗</a><br /><span className="text-xs text-zinc-500">Now the council votes — see “Suggestions” below.</span></p>
-                    )}
                   </div>
                 </div>
                 <div className="min-w-0 lg:col-span-2"><VerifiedPanel a={a.attestation} hashes={{ request: a.advice.requestHash, response: a.advice.responseHash }} /></div>
@@ -408,6 +466,18 @@ export default function Home() {
             )}
           </Card>
         </div>
+      )}
+      {data && calc && (
+        <section className="mt-5 min-w-0 rounded-2xl border border-dashed border-[#FFC56E]/40 bg-[#121315] p-4 sm:p-5">
+          <div className="mb-2 flex flex-wrap items-center gap-2"><h2 className={`${mono} text-xs font-semibold uppercase tracking-wider text-zinc-400`}>Demo controls</h2><Badge kind="demo">Demo only</Badge></div>
+          <p className="text-sm text-zinc-300">Want to try it again from the start? Reset puts the money back so payroll is short by {usd(data.demo.startingGapNear * data.demo.demoNearUsdPrice)} again. Test network only.</p>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button className={btnGhost} disabled={busy !== null || !data.demoMode} onClick={resetDemo}>{busy === "reset" ? "Resetting…" : "Reset demo"}</button>
+            {!data.demoMode && <span className="text-xs text-zinc-500">Reset is switched off on this server.</span>}
+          </div>
+          {needsTopup && <p className="mt-3 rounded-lg border border-[#FFC56E]/40 bg-[#FFC56E]/10 p-3 text-sm text-[#FFC56E]" role="alert"><b>Demo needs a top-up.</b> The main reserve doesn&apos;t have enough spare test NEAR to cover the gap. Send a few test NEAR from the faucet to <span className={`${mono} break-all`}>{data.dao}</span>.</p>}
+          {resetMsg && <p className="mt-3 text-sm text-zinc-200" role="status">{resetMsg}</p>}
+        </section>
       )}
       <footer className="mt-10 text-xs text-zinc-600">Test network only. Coinsel can only suggest — it can&apos;t send money. Yellow badges mark demo data.</footer>
     </div>
