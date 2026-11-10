@@ -8,8 +8,9 @@ import { createHash, randomBytes } from "node:crypto";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { keccak_256 } from "@noble/hashes/sha3.js";
 import { getCollateral, verify as dcapVerify, PHALA_PCCS_URL } from "@phala/dcap-qvl";
+import { env } from "./env";
 
-export const NEARAI_BASE = (process.env.NEARAI_BASE_URL || "https://cloud-api.near.ai/v1").replace(/\/$/, "");
+export const NEARAI_BASE = (env("NEARAI_BASE_URL") || "https://cloud-api.near.ai/v1").replace(/\/$/, "");
 export const NRAS_URL = "https://nras.attestation.nvidia.com/v3/attest/gpu";
 /** Intel TDX statuses we accept (policy). Anything else is a failed check. */
 export const ACCEPTED_TCB = ["UpToDate"];

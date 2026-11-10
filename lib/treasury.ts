@@ -4,12 +4,13 @@ import { NETWORK, explorerAccountUrl, viewAccount, yoctoToNear } from "./near";
 import { demoCouncil } from "./chain-write";
 import { getCouncil, getFtBalance, getNearBalance, getRecentProposals } from "./sputnik";
 import { startingPayrollNear } from "./demo-reset";
+import { env, isDemoMode } from "./env";
 
 /** A small cushion the main account keeps on top of its storage. */
 export const RESERVE_CUSHION_NEAR = 0.05;
 
 export async function loadTreasury() {
-  const dao = process.env.DAO_ACCOUNT_ID;
+  const dao = env("DAO_ACCOUNT_ID");
   if (!dao) throw new Error("DAO_ACCOUNT_ID is not set on the server.");
   const payroll = demo.payrollAccountId;
   const [daoAccount, payrollBalance, council, proposals, fts] = await Promise.all([
@@ -31,9 +32,9 @@ export async function loadTreasury() {
     onChain: { nearBalance, tokens: fts.filter((x): x is NonNullable<typeof x> => !!x) },
     council,
     proposals,
-    demoMode: process.env.DEMO_MODE === "true",
+    demoMode: isDemoMode(),
     // Public account ids only (never keys): which demo button signs as which council account.
-    demoCouncil: process.env.DEMO_MODE === "true" ? demoCouncil().map((m) => ({ index: m.index, accountId: m.accountId })) : [],
+    demoCouncil: isDemoMode() ? demoCouncil().map((m) => ({ index: m.index, accountId: m.accountId })) : [],
     demo: {
       note: demo._note,
       demoNearUsdPrice: demo.demoNearUsdPrice,

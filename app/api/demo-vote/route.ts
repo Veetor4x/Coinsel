@@ -5,12 +5,13 @@ import { checkDestination } from "@/lib/guard";
 import { getProposal } from "@/lib/sputnik";
 import { approveAsCouncil, demoCouncil, settledProposal } from "@/lib/chain-write";
 import { getCouncil } from "@/lib/sputnik";
+import { env, isDemoMode } from "@/lib/env";
 
 export const maxDuration = 60;
 
 export async function POST(req: Request) {
-  if (process.env.DEMO_MODE !== "true") return NextResponse.json({ error: "Demo voting is switched off on this server." }, { status: 403 });
-  const dao = process.env.DAO_ACCOUNT_ID;
+  if (!isDemoMode()) return NextResponse.json({ error: "Demo voting is switched off on this server." }, { status: 403 });
+  const dao = env("DAO_ACCOUNT_ID");
   const b = await req.json().catch(() => null);
   const id = Number(b?.proposalId), n = Number(b?.member);
   if (!dao || !Number.isInteger(id) || id < 0 || ![1, 2, 3].includes(n)) return NextResponse.json({ error: "Pick a suggestion and a council member (1, 2 or 3)." }, { status: 400 });

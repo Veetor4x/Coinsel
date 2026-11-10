@@ -98,3 +98,19 @@ describe("empty treasury", () => {
     expect(r.shortfalls).toEqual([]);
   });
 });
+
+describe("alert wording", () => {
+  it("leads with the total gap, not just the first day's gap", () => {
+    const r = analyze(
+      [{ chain: "P", symbol: "NEAR", amount: 1, usdValue: 100, source: "real" }],
+      [
+        { id: "a", label: "A", amountUsd: 200, dueInDays: 5, chain: "P" },
+        { id: "b", label: "B", amountUsd: 300, dueInDays: 9, chain: "P" },
+      ],
+    );
+    const f = r.findings.find((x) => x.id === "shortfall")!;
+    expect(r.gapUsd).toBe(400);
+    expect(f.detail.startsWith("We're short by $400")).toBe(true);
+    expect(f.detail).toContain("$100 short that day");
+  });
+});

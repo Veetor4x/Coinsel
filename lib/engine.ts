@@ -148,11 +148,16 @@ export function analyze(balances: Balance[], obligations: Obligation[]): HealthR
     const first = shortfalls[0];
     const sameDay = shortfalls.filter((s) => s.dueInDays === first.dueInDays);
     const dayShort = round2(sameDay.reduce((s, x) => s + x.shortUsd, 0));
+    // Lead with the TOTAL gap: it is the number in the headline and the one the fix covers.
+    const who = sameDay.length > 1 ? `${sameDay.length} payouts` : "A payout";
+    const firstPart = shortfalls.length > sameDay.length
+      ? ` It starts in ${days(first.dueInDays)} (${usd(dayShort)} short that day).`
+      : ` ${who} due in ${days(first.dueInDays)} can't be fully paid.`;
     findings.push({
       id: "shortfall",
       severity: "critical",
       title: `${sameDay.length > 1 ? "Payouts are" : "A payout is"} short in ${days(first.dueInDays)}`,
-      detail: `${sameDay.length > 1 ? `${sameDay.length} payouts` : "A payout"} due in ${days(first.dueInDays)} can't be fully paid. We're short by ${usd(dayShort)}${shortfalls.length > sameDay.length ? ` (${usd(shortTotal)} across all upcoming payouts)` : ""}.`,
+      detail: `We're short by ${usd(shortTotal)} in total.${firstPart}`,
     });
   } else if (obs.length) {
     findings.push({ id: "covered", severity: "ok", title: "Every upcoming payout is covered", detail: `There is enough money for all ${obs.length} payout${obs.length === 1 ? "" : "s"} (${usd(totalDue)} in total).` });

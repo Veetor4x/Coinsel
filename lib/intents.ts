@@ -1,8 +1,9 @@
 // NEAR Intents 1Click API: a REAL price quote with dry:true. Nothing is executed, no money moves.
 // Docs: https://docs.near-intents.org/integration/distribution-channels/1click-api/quickstart/making-a-request
 import demo from "@/config/demo-treasury.json";
+import { env } from "./env";
 
-const BASE = (process.env.ONECLICK_API_URL || "https://1click.chaindefuser.com").replace(/\/$/, "");
+const BASE = (env("ONECLICK_API_URL") || "https://1click.chaindefuser.com").replace(/\/$/, "");
 export const QUOTE_LABEL = "Real price quote — no money moved (NEAR Intents has no test network).";
 
 export type QuoteResult =
@@ -25,7 +26,7 @@ async function once(usdc: number): Promise<QuoteResult> {
   const c = demo.intents;
   const res = await fetch(`${BASE}/v0/quote`, {
     method: "POST",
-    headers: { "content-type": "application/json", ...(process.env.ONECLICK_JWT ? { authorization: `Bearer ${process.env.ONECLICK_JWT}` } : {}) },
+    headers: { "content-type": "application/json", ...(env("ONECLICK_JWT") ? { authorization: `Bearer ${env("ONECLICK_JWT")}` } : {}) },
     body: JSON.stringify({
       dry: true,
       swapType: "EXACT_INPUT",
