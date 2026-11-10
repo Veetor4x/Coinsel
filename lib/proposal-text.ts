@@ -10,6 +10,8 @@ export function buildDescription(a: {
   advice: string; amountNear: number; amountUsd: number; receiver: string; quote: QuoteResult; model: string; responseHash: string; attestationHash: string;
   /** When the real testnet swap is switched on, Step 2 is its own proposal; this line says so instead of the quote-only text. */
   step2Override?: string;
+  /** Fingerprint of the payout list this was written for (see lib/fingerprint.ts). Lets the vote check refuse a swapped list. */
+  payoutFingerprint?: string;
 }): string {
   const q = a.step2Override ?? (a.quote.ok
     ? `Step 2 (later, on another network, quote only): refill the main reserve from idle USDC on Ethereum via NEAR Intents. Real price quote, no money moved: ${a.quote.amountInUsdc.toLocaleString("en-US")} USDC would become about ${money(a.quote.amountOutUsd)} of NEAR (quoted ${a.quote.quotedAt}).`
@@ -22,6 +24,7 @@ export function buildDescription(a: {
     `Why: ${a.advice.replace(/\s+/g, " ").trim()}`,
     `Private AI check: verified. Model ${a.model}. Attestation sha256:${a.attestationHash}. Answer sha256:${a.responseHash}.`,
     "Demo scale: testnet amounts are shown at real-world size. Coinsel can only suggest. It cannot send money or vote.",
+    ...(a.payoutFingerprint ? [`Payout list fingerprint: ${a.payoutFingerprint}`] : []),
   ].join("\n");
 }
 

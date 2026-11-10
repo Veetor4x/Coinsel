@@ -46,6 +46,18 @@ If a step says "Couldn't verify this time", press **Try again**. Coinsel never s
 - **The council decides.** The DAO policy needs 2 of 3 council votes. The agent's DAO role may only add proposals (`transfer/call/vote:AddProposal`). Proposal bond is 0 because function-call keys cannot attach a deposit.
 - **Guard on destinations.** `lib/guard.ts` refuses any text or proposal that points to an address not in the DAO-owned list (`config/demo-treasury.json`). Notes and AI output are treated as untrusted. Only numbers and sanitised labels are sent to the AI, never notes, account ids or keys.
 
+## Safety checks
+What stops a duplicate, padded or poisoned suggestion (all in code, all tested in `tests/hardening.test.ts` and `tests/guard.test.ts`):
+- **Receiver is fixed.** A Step 1 top-up always goes to the DAO-owned payroll account from `config/demo-treasury.json`. The browser, the AI, labels and notes can't change it. Demo voting refuses any transfer to another account.
+- **Amount is recomputed, never trusted.** The amount is the gap worked out on the server from on-chain balances plus the payout list. Before every demo vote it is recomputed again and refused if the suggestion asks for more than the real gap, or if payroll is already covered. There is also a hard ceiling per top-up (`limits.maxTopUpNear`).
+- **No duplicates.** An identical top-up (same kind, receiver, amount) is not filed while one is waiting for votes ("Already filed as #X"), nor if the same transfer was already sent this pay cycle and its money is still in effect. Step 2 allows one open swap at a time. Filing is serialised per server so two quick requests can't both slip through.
+- **Approvers are warned.** A suggestion card shows "Same transfer already sent in #X at <time>" (or "Already filed as #X") before anyone votes, and demo voting refuses to approve it.
+- **Payout list is sanity-checked.** At most 20 payouts, each 0 to 1,000 NEAR, due within 365 days; negative, huge, non-numeric and oversized requests are refused. Notes and labels are data only: they never reach the receiver or the amount, they are scanned for outside addresses ("send funds to bob.testnet" is blocked), and the AI's own answer is scanned too.
+- **A swapped list can't justify a vote.** The suggestion text carries a fingerprint of the payout list it was written for; a vote with a different list is refused.
+- **The agent can only ask.** Its one key can only call `add_proposal`; the council (2 of 3) decides.
+
+Known limits: the payout list lives in the browser (no database), so a hand-made request can submit its own list; the hard ceiling, the reserve balance and the 2-of-3 vote are the backstop. The filing lock is per server instance. Public endpoints have no rate limit beyond these checks.
+
 ## NEAR tech used
 | Tech | Where in the code |
 |---|---|

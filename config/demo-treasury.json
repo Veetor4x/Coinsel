@@ -94,5 +94,13 @@
     "maxUsdc": 25,
     "quoteMinutes": 30,
     "minQuoteMinutesLeft": 10
+  },
+  "limits": {
+    "_note": "Hard ceilings checked on the server for every request. The payout list lives in the browser (no database), so these cap what a hand-made request can ask for.",
+    "maxPayouts": 20,
+    "maxPayoutNear": 1000,
+    "maxDueDays": 365,
+    "maxTopUpNear": 20,
+    "payCycleDays": 7
   }
 }

@@ -1,7 +1,8 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { analyze, type Severity } from "@/lib/engine";
-import { toEngineInputs, totalNear, type UiObligation as Obligation } from "@/lib/engine-inputs";
+import { gapNear, toEngineInputs, totalNear, type UiObligation as Obligation } from "@/lib/engine-inputs";
+import { duplicateMessage, findDuplicate } from "@/lib/safety";
 import { TRICK_NOTE } from "@/lib/trick";
 import { checkText } from "@/lib/guard";
 import demo from "@/config/demo-treasury.json";
@@ -249,7 +250,7 @@ export default function Home() {
   async function vote(proposalId: number, member: number) {
     setBusy(member); setNotice(null);
     try {
-      const r = await fetch("/api/demo-vote", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ proposalId, member }) });
+      const r = await fetch("/api/demo-vote", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ proposalId, member, obligations: obs }) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "The vote didn't go through.");
       const who = data?.demoCouncil.find((m) => m.index === member)?.accountId;
@@ -274,6 +275,8 @@ export default function Home() {
   const suggestion = (p: Proposal) => {
     if (!data) return null;
     const firstLine = p.description.split("\n").find((l) => l.startsWith("What:")) ?? p.description.split("\n")[0];
+    // Warn the approver BEFORE they vote if this exact transfer is a copy of one already waiting or already sent.
+    const dup = p.status === "InProgress" && health ? findDuplicate(p, data.proposals, { gapNear: gapNear(health, data.demo.demoNearUsdPrice), now: Date.parse(data.fetchedAt) }) : null;
     return (
       <li key={p.id} className="min-w-0 py-3">
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
@@ -282,6 +285,7 @@ export default function Home() {
             {p.status === "InProgress" ? `Waiting for votes · ${p.approvals} of ${data.council.threshold}` : p.status === "Approved" ? (p.swap || p.register ? "Approved — see Step 2" : "Approved — money moved") : p.status}
           </span>
         </div>
+        {dup && <p className="mt-1 rounded-md border border-warn/40 bg-warn/10 px-2 py-1 text-xs text-warn" role="alert">⚠ {duplicateMessage(dup)} Don&apos;t approve this one.</p>}
         {p.status === "InProgress" && data.demoMode && (p.kind === "Transfer" || !!p.swap || !!p.register) && (
           <div className="mt-2">
             <div className="flex flex-wrap gap-2">

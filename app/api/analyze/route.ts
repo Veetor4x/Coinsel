@@ -11,6 +11,7 @@ import { getDryQuote, usdcToQuote } from "@/lib/intents";
 import { summarize, verifyAnswer, verifyModel, type AttestationResult } from "@/lib/attestation";
 import { getAdvice, getModel, type AdvicePlan } from "@/lib/ai";
 import { env } from "@/lib/env";
+import { readJson } from "@/lib/validate";
 import demo from "@/config/demo-treasury.json";
 import { requestQuote, swapReadiness, tidepoolEnabled, TIDEPOOL_LABEL } from "@/lib/tidepool";
 
@@ -18,7 +19,7 @@ export const maxDuration = 120;
 
 export async function POST(req: Request) {
   const apiKey = env("NEARAI_API_KEY");
-  const body = await req.json().catch(() => null);
+  const body = (await readJson(req)) as { obligations?: unknown } | null;
   const obs = parseObligations(body?.obligations);
   if (!obs) return NextResponse.json({ error: "Those payouts don't look right. Check the amounts and dates." }, { status: 400 });
   if (!apiKey) return NextResponse.json({ status: "error", message: "The server isn't set up for AI advice yet." }, { status: 500 });
