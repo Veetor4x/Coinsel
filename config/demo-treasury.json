@@ -3,14 +3,61 @@
   "demoNearUsdPrice": 3,
   "trackedTokens": [],
   "obligations": [
-    { "id": "payroll-alice", "label": "Payroll – Alice (design)", "amountNear": 2, "dueInDays": 9, "kind": "payroll", "note": "" },
-    { "id": "payroll-bola", "label": "Payroll – Bola (engineering)", "amountNear": 2, "dueInDays": 9, "kind": "payroll", "note": "" },
-    { "id": "payroll-chidi", "label": "Payroll – Chidi (community)", "amountNear": 2, "dueInDays": 9, "kind": "payroll", "note": "" },
-    { "id": "payroll-dayo", "label": "Payroll – Dayo (ops)", "amountNear": 2, "dueInDays": 9, "kind": "payroll", "note": "" },
-    { "id": "payroll-ebere", "label": "Payroll – Ebere (writing)", "amountNear": 2, "dueInDays": 9, "kind": "payroll", "note": "" },
-    { "id": "grant-open-source", "label": "Grant – open-source tooling", "amountNear": 3, "dueInDays": 30, "kind": "grant", "note": "Milestone 1 of 2" }
+    {
+      "id": "payroll-product-designer",
+      "label": "Payroll – Product designer",
+      "amountNear": 2,
+      "dueInDays": 9,
+      "kind": "payroll",
+      "note": ""
+    },
+    {
+      "id": "payroll-core-engineer",
+      "label": "Payroll – Core engineer",
+      "amountNear": 2,
+      "dueInDays": 9,
+      "kind": "payroll",
+      "note": ""
+    },
+    {
+      "id": "payroll-community-lead",
+      "label": "Payroll – Community lead",
+      "amountNear": 2,
+      "dueInDays": 9,
+      "kind": "payroll",
+      "note": ""
+    },
+    {
+      "id": "payroll-smart-contract-dev",
+      "label": "Payroll – Smart-contract dev",
+      "amountNear": 2,
+      "dueInDays": 9,
+      "kind": "payroll",
+      "note": ""
+    },
+    {
+      "id": "payroll-data-analyst",
+      "label": "Payroll – Data analyst",
+      "amountNear": 2,
+      "dueInDays": 9,
+      "kind": "payroll",
+      "note": ""
+    },
+    {
+      "id": "grant-open-source",
+      "label": "Grant – open-source tooling",
+      "amountNear": 3,
+      "dueInDays": 30,
+      "kind": "grant",
+      "note": "Milestone 1 of 2"
+    }
   ],
   "otherChainBalances": [
-    { "chain": "Ethereum", "symbol": "USDC", "amount": 12500, "usdValue": 12500 }
+    {
+      "chain": "Ethereum",
+      "symbol": "USDC",
+      "amount": 12500,
+      "usdValue": 12500
+    }
   ]
 }

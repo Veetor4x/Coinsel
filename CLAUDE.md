@@ -95,3 +95,19 @@ NEAR_NETWORK, NEAR_RPC_URL, DAO_ACCOUNT_ID, AGENT_ACCOUNT_ID, AGENT_FUNCTION_CAL
 - `trackedTokens` in config/demo-treasury.json lists NEP-141 contracts to read via `ft_balance_of` (empty for now).
 - Reads use plain JSON-RPC `fetch` (lib/near.ts), no keys. nearblocks API is not reachable from the container; UI only links to nearblocks.
 - Vercel env vars for Day 1: NEAR_NETWORK, NEAR_RPC_URL, DAO_ACCOUNT_ID.
+
+
+## CONTENT RULES
+- Keep all demo data global and neutral. Replace contributor names (Alice, Bola, Chidi, Dayo, Ebere) with roles: "Core engineer", "Product designer", "Smart-contract dev", "Community lead", "Data analyst". No region-specific names anywhere.
+- Plain English: every sentence understandable by a non-crypto person in 5 seconds. Tech terms only in small "details" text. Examples: "It can only suggest. It can't send money." / "Your data stayed private — and you can check that." / "We found the cheapest way to move the money."
+
+## BRAND — "Fusion" (apply from now on; full polish on Day 4)
+- Colours: background #0C0D0E (graphite), primary #C6FF3D (lime), text #F2F2EE, muted #B7BBB6 / #8E928D, warning #FF9A82, demo badge #FFC56E, card #121315, border #262A2E. Faint lime grid background (96px).
+- Fonts: Syne 700/800 for headlines + "C O I N S E L" wordmark (wide letter-spacing), Inter for body, JetBrains Mono for labels/logs.
+- Logo mark: broken orbit ring (light) around a lime core dot + small lime satellite dot.
+- Motion: radar sweep with pulsing blips, self-typing "counsel log", tilted lime marquee, cards that gently float. Smooth on mobile; respect prefers-reduced-motion.
+- Day 4 extras (do NOT build yet): sound effects + soft royalty-free ambient music behind a sound toggle that starts OFF; near.social community update post when a proposal is filed (NICE).
+
+## Day 2 decisions (2026-11-10)
+- Health engine (`lib/engine.ts`) works in USD. NEAR is converted with the fixed demo price. Each payout can only be paid from money on its own network; payouts are paid in date order. "Idle" = not needed for any payout in the next 30 days.
+- AI model shortlist (NEAR AI Cloud, TEE): see PR notes. Preferred: `deepseek-ai/DeepSeek-V4.1-Flash-1017` (NEAR AI's own attested TEE). Not chosen/built yet.
