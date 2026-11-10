@@ -12,7 +12,8 @@
     "setup:accounts": "tsx scripts/create-accounts.ts",
     "setup:dao": "tsx scripts/create-dao.ts",
     "setup:agent-key": "tsx scripts/add-agent-key.ts",
-    "setup:check": "tsx scripts/check-policy.ts"
+    "setup:check": "tsx scripts/check-policy.ts",
+    "setup:payroll": "tsx scripts/create-payroll.ts"
   },
   "dependencies": {
     "@noble/curves": "^2.4.0",

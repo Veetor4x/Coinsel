@@ -13,8 +13,16 @@ will be added here as features land.
 Sputnik DAO v2 (testnet) · NEAR testnet RPC · near-api-js · NEAR AI Cloud (private inference + attestation) ·
 NEAR Intents 1Click API (dry-run quotes only; Intents has no testnet) · NEAR Wallet Selector (planned)
 
-## Mocked / demo data (will be labelled in the UI)
+## Mocked / demo data (labelled in the UI)
+The Ethereum USDC balance, the payout list and the NEAR price ($3) are demo data. The NEAR Intents quote is a REAL price quote (dry run, no money moved) but its receiving address is a placeholder. DEMO_MODE votes are signed server-side with testnet keys. Response-signature checking is not done yet (hardware attestation is).
 Other-chain balances and the payroll/grant obligations are demo data in `config/demo-treasury.json`. Nothing uses mainnet funds.
+
+## Try it (do X → see Y)
+1. Open the app → **see** the DAO's real test-network balance and "Payouts are short in 9 days".
+2. Press **Get advice** → **see** plain-English advice plus a **Verified private** panel (real Intel/NVIDIA hardware proofs from NEAR AI Cloud; if the check fails twice you get "Couldn't verify this time" and a **Try again** button — never unverified advice).
+3. Press **File this suggestion** → **see** a real Sputnik proposal on testnet (explorer link). It is filed by the agent account, whose only key can call `add_proposal` on the DAO.
+4. Press **Approve as Council 1**, then **Council 2** (DEMO_MODE: the server signs with testnet council keys) → **see** the proposal execute and balances update. In real use each council member signs with their own wallet.
+5. Press **Try the trick** → **see** "Blocked: that address isn't yours…" (the guard refuses any address the DAO doesn't own).
 
 ## Run locally
 ```bash
@@ -24,6 +32,9 @@ npm test         # unit tests
 ```
 
 ## Testnet setup (once)
+(`npm run setup:payroll` also creates the DAO-owned payroll account, paid for by `FUNDER_ACCOUNT_ID` / `FUNDER_PRIVATE_KEY`.)
+Most of the DAO's balance is locked for contract storage, so the demo moves only 0.1 NEAR per run; top the DAO up from the faucet if "can't afford" appears.
+
 Creates 3 council accounts, 1 agent account and a Sputnik DAO (proposal bond 0, 2-of-3 council, agent may only add proposals),
 then gives the agent a function-call key limited to `add_proposal` on the DAO.
 ```bash

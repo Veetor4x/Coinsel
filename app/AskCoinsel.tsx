@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 
 type Check = { id: string; label: string; problem: string; status: "pass" | "fail" | "unavailable"; details?: string };
+export type AttestationView = Attestation;
 type Attestation = { status: "verified" | "failed" | "unavailable"; headline: string; model: string; nonce: string; checkedAt: string; checks: Check[]; tcbStatus?: string; signer?: string };
 type Result = {
   advice: string | null; attestation?: Attestation; blocked?: boolean; message?: string; error?: string;
@@ -46,7 +47,7 @@ export function VerifiedPanel({ a, hashes }: { a: Attestation; hashes?: Result["
   return (
     <div className={`rounded-xl border p-4 ${TONE[a.status]}`}>
       <div className={`font-[family-name:var(--font-syne)] text-lg font-bold ${HEAD[a.status]}`}>{a.status === "verified" ? "Verified private" : a.status === "failed" ? "Proof failed" : "Couldn’t verify this time"}</div>
-      <p className="mb-3 text-sm text-zinc-300">{a.headline}</p>
+      <p className="mb-3 text-sm text-zinc-300">{a.status === "verified" ? "Your data stayed private — and you can check that." : a.headline}</p>
       <ul className="space-y-1.5 text-sm">
         {a.checks.map((c) => (
           <li key={c.id} className="flex gap-2">

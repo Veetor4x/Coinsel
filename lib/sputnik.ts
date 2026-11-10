@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- chain/attestation JSON is untyped; every field is checked before use */
 // Read-only Sputnik DAO v2 helpers.
 import { viewAccount, viewFunction, yoctoToNear } from "./near";
 
@@ -24,24 +25,42 @@ export async function getCouncil(dao: string): Promise<CouncilInfo> {
   };
 }
 
-export type ProposalSummary = { id: number; proposer: string; description: string; kind: string; status: string; submissionTime: string };
+export type ProposalSummary = {
+  id: number; proposer: string; description: string; kind: string; status: string; submissionTime: string;
+  /** For Transfer proposals. */
+  receiver?: string; amountNear?: number;
+  approvals: number; voters: string[];
+};
+
+function summarize(p: any): ProposalSummary {
+  const kindName = typeof p.kind === "string" ? p.kind : Object.keys(p.kind)[0];
+  const t = kindName === "Transfer" ? p.kind.Transfer : null;
+  const votes: Record<string, string> = p.votes ?? {};
+  return {
+    id: p.id,
+    proposer: p.proposer,
+    description: String(p.description ?? "").slice(0, 2000),
+    kind: kindName,
+    status: p.status,
+    submissionTime: String(Math.floor(Number(BigInt(p.submission_time) / 1_000_000n))),
+    receiver: t && !t.token_id ? t.receiver_id : undefined,
+    amountNear: t && !t.token_id ? yoctoToNear(t.amount) : undefined,
+    approvals: Object.values(votes).filter((v) => v === "Approve").length,
+    voters: Object.keys(votes),
+  };
+}
+
+export async function getProposal(dao: string, id: number): Promise<ProposalSummary & { rawKind: any }> {
+  const p = await viewFunction<any>(dao, "get_proposal", { id });
+  return { ...summarize(p), rawKind: p.kind };
+}
 
 export async function getRecentProposals(dao: string, max = 5): Promise<ProposalSummary[]> {
   const last = await viewFunction<number>(dao, "get_last_proposal_id");
   if (!last) return [];
   const from = Math.max(0, last - max);
-  type RawProposal = { id: number; proposer: string; description?: string; kind: string | Record<string, unknown>; status: string; submission_time: string };
-  const raw = await viewFunction<RawProposal[]>(dao, "get_proposals", { from_index: from, limit: max });
-  return raw
-    .map((p) => ({
-      id: p.id,
-      proposer: p.proposer,
-      description: String(p.description ?? "").slice(0, 300),
-      kind: typeof p.kind === "string" ? p.kind : Object.keys(p.kind)[0],
-      status: p.status,
-      submissionTime: String(Math.floor(Number(BigInt(p.submission_time) / 1_000_000n))),
-    }))
-    .reverse();
+  const raw = await viewFunction<any[]>(dao, "get_proposals", { from_index: from, limit: max });
+  return raw.map(summarize).reverse();
 }
 
 export type FtBalance = { contractId: string; symbol: string; decimals: number; amount: number };
