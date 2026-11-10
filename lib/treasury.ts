@@ -11,7 +11,7 @@ export const RESERVE_CUSHION_NEAR = 0.05;
 
 export async function loadTreasury() {
   const dao = env("DAO_ACCOUNT_ID");
-  if (!dao) throw new Error("DAO_ACCOUNT_ID is not set on the server.");
+  if (!dao) throw new Error("This server isn't connected to a DAO yet. Set DAO_ACCOUNT_ID (see .env.example and the README).");
   const payroll = demo.payrollAccountId;
   const [daoAccount, payrollBalance, council, proposals, fts] = await Promise.all([
     viewAccount(dao),

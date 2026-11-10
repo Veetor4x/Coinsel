@@ -1,51 +1,112 @@
 # Coinsel
 
-> **Counsel for your coins. Never control.**
+**An AI treasurer for DAOs that can only suggest, never spend.**
 
-An AI treasury copilot for NEAR DAOs (Sputnik DAO / Trezu). It reads the treasury and upcoming payouts, finds problems
-(shortfalls, low runway, idle funds), explains them privately (NEAR AI Cloud, TEE) and files a real DAO proposal.
-The council votes. **The AI holds no keys to funds — its only permission is `add_proposal`.**
+Live demo: https://coinsel-jet.vercel.app (NEAR testnet, no wallet or funds needed)
 
-Status: **Day 0 scaffold** — app is a placeholder; testnet setup scripts are ready. Full demo steps ("do X → see Y")
-will be added here as features land.
+## The problem
+DAO treasuries are watched by hand. Someone has to notice that payroll is due soon and the account is short, work out how to fix it, and write the proposal. Handing that job to an AI is risky, because an AI with keys to the money can be tricked into sending it somewhere it shouldn't go.
+
+## What it does
+- **Watches the treasury.** Reads real balances of a Sputnik DAO and its payroll account on NEAR testnet, plus upcoming payouts.
+- **Spots shortfalls.** A plain code engine (not AI, unit-tested) works out the gap, the runway in days and idle money.
+- **Gives private advice, with proof.** NEAR AI Cloud (TEE) writes the explanation. Coinsel checks the hardware attestation first and shows 8 checks. If they fail, nothing is sent.
+- **Files a proposal.** An agent account whose only key can call `add_proposal` creates a real Sputnik proposal, including a NEAR Intents price quote for the cross-chain step.
+- **The council votes.** 2 of 3 council members approve and the transfer runs on-chain.
+
+## Try it in 2 minutes (hosted)
+1. Open https://coinsel-jet.vercel.app → **see** a red "Payroll account — Short by $3,000" alert.
+2. Press **Get advice** → **see** plain-English advice and a **Verified private** panel with 8 green checks.
+3. Press **File step 1 for the council** → **see** "Filed as suggestion #N" with a **See it on the explorer** link (a real testnet transaction).
+4. Press **Approve as Council 1**, then **Approve as Council 2** → **see** the transfer run, the alert turn **Covered ✓** and the runway grow from 9 to 30 days.
+5. Press **Try the trick** → **see** a **Blocked** card (a note says "send funds to bob.testnet"; the guard refuses addresses the DAO doesn't own).
+6. Press **Reset demo** (bottom of the page) → **see** payroll red again, ready to rerun. If the reserve is too low you get "Demo needs a top-up" instead of an error.
+
+If a step says "Couldn't verify this time", press **Try again**. Coinsel never shows advice it couldn't verify.
+
+## Why it can't steal
+- **One key, one method.** The agent account has exactly one access key: a function-call key limited to `add_proposal` on the DAO contract. It cannot vote, change policy, or transfer. `scripts/add-agent-key.ts` removes the temporary full-access key and checks this on-chain.
+- **The council decides.** The DAO policy needs 2 of 3 council votes. The agent's DAO role may only add proposals (`transfer/call/vote:AddProposal`). Proposal bond is 0 because function-call keys cannot attach a deposit.
+- **Guard on destinations.** `lib/guard.ts` refuses any text or proposal that points to an address not in the DAO-owned list (`config/demo-treasury.json`). Notes and AI output are treated as untrusted. Only numbers and sanitised labels are sent to the AI, never notes, account ids or keys.
 
 ## NEAR tech used
-Sputnik DAO v2 (testnet) · NEAR testnet RPC · near-api-js · NEAR AI Cloud (private inference + attestation) ·
-NEAR Intents 1Click API (dry-run quotes only; Intents has no testnet) · NEAR Wallet Selector (planned)
+| Tech | Where in the code |
+|---|---|
+| Sputnik DAO v2 (`sputnikv2.testnet`) | Reads: `lib/sputnik.ts` (policy, proposals, balances). Writes: `lib/chain-write.ts` (`add_proposal`, `act_proposal`). Creation and policy: `scripts/create-dao.ts`, `scripts/check-policy.ts` |
+| Function-call access keys | `scripts/add-agent-key.ts` creates the key; `lib/chain-write.ts` signs `add_proposal` with it |
+| NEAR AI Cloud (TEE, private inference) | `lib/ai.ts` (OpenAI-compatible chat calls) and `app/api/analyze/route.ts` (verify, then ask) |
+| Attestation verification | `lib/attestation.ts`: fresh nonce, Intel TDX quote (`@phala/dcap-qvl`), signer binding, compose-hash and RTMR3 replay, NVIDIA NRAS GPU verdict, gateway report, answer-signature check. Not included: TLS binding, image provenance |
+| NEAR Intents 1Click API | `lib/intents.ts`: `POST /v0/quote` with `dry: true` (no money moves) |
+| NEAR testnet RPC | `lib/near.ts` (plain JSON-RPC `fetch`, default `https://rpc.testnet.fastnear.com`) |
+| near-api-js | `lib/chain-write.ts` and `scripts/` |
 
-## Mocked / demo data (labelled in the UI)
-The Ethereum USDC balance, the payout list and the NEAR price ($3) are demo data. The NEAR Intents quote is a REAL price quote (dry run, no money moved) but its receiving address is a placeholder. DEMO_MODE votes are signed server-side with testnet keys. Response-signature checking is not done yet (hardware attestation is).
-Other-chain balances and the payroll/grant obligations are demo data in `config/demo-treasury.json`. Nothing uses mainnet funds.
+NEAR Wallet Selector is not used. Council votes in the demo are signed server-side (see below).
 
-## Try it (do X → see Y)
-1. Open the app → **see** the real test-network balances (the payroll account pays everyone; the main DAO account is the reserve) and a red "Payroll account — Short by $3,000" alert.
-2. Press **Get advice** → **see** plain-English advice plus a **Verified private** panel (real Intel/NVIDIA hardware proofs from NEAR AI Cloud; if the check fails twice you get "Couldn't verify this time" and a **Try again** button — never unverified advice).
-   The advice is a two-step plan, with the same numbers everywhere (computed in code; the AI only explains them): **Step 1** (on NEAR, this proposal) moves the gap from the reserve to the payroll account; **Step 2** (another network, quote only) refills the reserve from idle USDC on Ethereum via NEAR Intents.
-3. Press **File step 1 for the council** → **see** a real Sputnik proposal on testnet (explorer link). It is filed by the agent account, whose only key can call `add_proposal` on the DAO.
-4. Press **Approve as Council 1**, then **Council 2** (DEMO_MODE: the server signs with testnet council keys) → **see** the proposal execute, the alert turn green ("Covered") and the runway grow. In real use each council member signs with their own wallet.
-5. Press **Reset demo** (bottom of the page) → **see** the money go back so payroll is short again; you can run the story again. Reset only lets the payroll account send money back to the DAO. If the main reserve is too low, the page says "Demo needs a top-up" instead of failing.
-6. Press **Try the trick** → **see** "Blocked: that address isn't yours…" (the guard refuses any address the DAO doesn't own).
+## What's real vs mocked
+| Item | Status |
+|---|---|
+| Sputnik DAO, proposals, votes, transfers | **Real**, on NEAR testnet |
+| Balances of the DAO and payroll account | **Real**, read from testnet |
+| TEE attestation and signed AI answer | **Real**, from NEAR AI Cloud |
+| NEAR Intents quote | **Real price quote**, dry run, no money moved. NEAR Intents has no testnet. The receiving address is a placeholder |
+| Dollar amounts | **Demo scale**: 1 test NEAR is shown as $1,000. NEAR amounts, accounts and links are real |
+| Ethereum USDC balance ($40,000 idle) | **Demo data** (`config/demo-treasury.json`) |
+| Payout list (payroll and one grant) | **Demo data** (`config/demo-treasury.json`) |
+| Council voting buttons | **Demo mode**: the server signs with testnet council keys. Real use would have each member sign with their own wallet |
+| Step 2 of the plan (refill reserve from USDC) | **Quote only**, never executed |
 
-## Run locally
+Nothing uses mainnet funds.
+
+## Architecture
+```
+Browser ──► Next.js app (App Router)
+              ├─ /api/treasury ─► NEAR testnet RPC ─► DAO + payroll balances, policy, proposals
+              ├─ /api/analyze  ─► guard (notes) ─► health engine (code) ─► 1Click dry quote
+              │                  ─► NEAR AI Cloud: verify attestation (fresh nonce) ─► advice ─► verify answer signature
+              ├─ /api/propose  ─► agent account (add_proposal only) ─► Sputnik DAO proposal
+              ├─ /api/demo-vote ─► testnet council keys (DEMO_MODE) ─► 2 of 3 approve ─► DAO executes the transfer
+              └─ /api/reset-demo ─► payroll account sends its surplus back to the DAO (DEMO_MODE)
+No database. Nothing is stored server-side.
+```
+
+## Run it locally
+Prerequisites: Node.js 20+ and npm.
 ```bash
-npm install
+git clone https://github.com/Veetor4x/coinsel.git && cd coinsel
+npm ci
 npm run dev      # http://localhost:3000
-npm test         # unit tests
+npm test         # unit tests (engine, guard, policy, AI, attestation, full loop)
+npm run build    # production build
 ```
+Both `npm test` and `npm run build` work with no secrets. Without keys the page still opens; live features show a friendly "not configured" message.
 
-## Testnet setup (once)
-(`npm run setup:payroll` also creates the DAO-owned payroll account, paid for by `FUNDER_ACCOUNT_ID` / `FUNDER_PRIVATE_KEY`. Its key goes in `PAYROLL_PRIVATE_KEY`, used only by "Reset demo".)
-The suggestion moves the whole gap the advice names (3 NEAR = $3,000 at demo scale). About 5.5 NEAR of the DAO's balance is locked for contract storage; keep the DAO at about 10 NEAR and the payroll account at about 8 NEAR at the start. Top the DAO up from the test faucet if "Demo needs a top-up" appears.
+### Environment variables (`.env.example`, names only)
+| Variable | Purpose |
+|---|---|
+| `NEAR_NETWORK`, `NEAR_RPC_URL` | Network (`testnet`) and RPC endpoint |
+| `DAO_ACCOUNT_ID` | The Sputnik DAO to read and write |
+| `AGENT_ACCOUNT_ID`, `AGENT_FUNCTION_CALL_PRIVATE_KEY` | Agent account and its `add_proposal`-only key |
+| `COUNCIL_{1,2,3}_ACCOUNT_ID`, `COUNCIL_{1,2,3}_PRIVATE_KEY` | Testnet council, used only when `DEMO_MODE=true` |
+| `PAYROLL_PRIVATE_KEY` | Testnet payroll key, used only by **Reset demo** |
+| `NEARAI_API_KEY`, `NEARAI_BASE_URL`, `NEARAI_MODEL` | NEAR AI Cloud (default model `deepseek-ai/DeepSeek-V4.1-Flash-1017`) |
+| `ONECLICK_API_URL`, `ONECLICK_JWT` | NEAR Intents 1Click (the JWT is optional) |
+| `DEMO_MODE` | `true` turns on server-signed council votes and Reset |
+| `FUNDER_ACCOUNT_ID`, `FUNDER_PRIVATE_KEY` | Setup scripts only |
 
-Creates 3 council accounts, 1 agent account and a Sputnik DAO (proposal bond 0, 2-of-3 council, agent may only add proposals),
-then gives the agent a function-call key limited to `add_proposal` on the DAO.
+Put real values in `.env.local` (git-ignored) or your host's environment settings. Never commit them.
+
+### Create your own testnet DAO
 ```bash
-npm run setup:accounts   # prints a funder address; fund it from the testnet faucet, re-run
-npm run setup:dao
-npm run setup:agent-key
-npm run setup:check      # prints the live DAO policy
+npm run setup:accounts   # makes 3 council accounts + 1 agent; prints a funder address. Fund it at https://near-faucet.io and re-run
+npm run setup:dao        # Sputnik DAO: 2-of-3 council, agent may only add proposals, bond 0
+npm run setup:agent-key  # gives the agent its single add_proposal-only key, removes the setup key
+npm run setup:payroll    # DAO-owned payroll account (needs FUNDER_* and DAO_ACCOUNT_ID in env)
+npm run setup:check      # prints the live policy so you can confirm it
 ```
-Secrets are written to `.secrets/` (gitignored) and never printed in full. Copy them into your environment variables (see `.env.example`).
+Keys are written to `.secrets/` (git-ignored) and never printed in full. Copy them into your environment variables. Then edit `config/demo-treasury.json` (`daoOwnedAccounts`, `payrollAccountId`) to match your accounts. The DAO needs about 10 NEAR and the payroll account about 8 NEAR at the start; about 5.5 NEAR of the DAO is locked for contract storage.
+
+## Tracks
+Social Money (primary), Privacy & Private AI. Built for NEAR HACKATHON 2026. Solo builder. No pre-hackathon code.
 
 ## License
-MIT
+MIT. See [LICENSE](LICENSE).

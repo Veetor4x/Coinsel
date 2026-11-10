@@ -146,3 +146,7 @@ NEAR_NETWORK, NEAR_RPC_URL, DAO_ACCOUNT_ID, AGENT_ACCOUNT_ID, AGENT_FUNCTION_CAL
 - Reset first closes open Coinsel suggestions (demo council votes Reject until closed; only agent-filed Transfers), then sends payroll surplus back.
 - Landing: `app/Hero.tsx` (hero, radar with live blips, tilted marquee, 3-card safety section), `app/Extras.tsx` (sound toggle, counsel log, "Covered" burst), `app/motion.tsx` (reveal, count-up, reduced-motion).
 - Sound (`lib/sound.ts`): Web Audio only, no files; OFF by default; choice in localStorage (try/catch); audio starts after the first tap (browser rule). Count-ups show the real number first and only animate on scroll-in. Cards with buttons never float.
+
+## Final session decisions (2026-11-10)
+- README rewritten for judges (pitch, 2-minute "do X → see Y", real-vs-mocked table, code map of NEAR tech). Fresh clone: `npm ci && npm run build && npm test` pass with no secrets.
+- History scanned: no keys or tokens. Unused Next.js starter SVGs removed. "Share on near.social" skipped: no verified pre-fill URL for near.social, and the agent has no keys to post anyway.
