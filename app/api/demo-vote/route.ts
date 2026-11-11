@@ -58,7 +58,7 @@ export async function POST(req: Request) {
       const t = await loadTreasury();
       const { balances, obligations } = toEngineInputs(t, obs);
       const gap = gapNear(analyze(balances, obligations), demo.demoNearUsdPrice);
-      const ok = checkTransferApproval({ proposal: p, all: t.proposals, gapNear: gap, listFingerprint: payoutFingerprint(obs), now: Date.now() });
+      const ok = checkTransferApproval({ proposal: p, all: t.proposals, gapNear: gap, listFingerprint: payoutFingerprint(obs), now: Date.now(), spendableNear: t.reserve.spendableNear, agents: council.agent });
       if (!ok.ok) return NextResponse.json({ error: ok.message, code: ok.code, duplicateOf: ok.duplicate?.id }, { status: 409 });
     }
     if (p.status !== "InProgress") return NextResponse.json({ error: `This suggestion is already ${p.status}.` }, { status: 409 });

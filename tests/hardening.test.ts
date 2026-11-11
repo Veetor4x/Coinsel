@@ -6,7 +6,7 @@ import { readJson } from "../lib/validate";
 import { checkObligations, checkDestination, checkText } from "../lib/guard";
 import { gapNear, toEngineInputs } from "../lib/engine-inputs";
 import { analyze } from "../lib/engine";
-import { checkAmountWithinGap, checkTransferApproval, duplicateMessage, findDuplicate, isPayrollReceiver, LIMITS, type ProposalLite } from "../lib/safety";
+import { checkAmountWithinGap, checkTransferApproval, duplicateMessage, findDuplicate, isPayrollReceiver, pendingOverlap, planTopUp, LIMITS, type ProposalLite } from "../lib/safety";
 import { payoutFingerprint } from "../lib/fingerprint";
 import { withLock } from "../lib/lock";
 import { buildDescription } from "../lib/proposal-text";
@@ -152,5 +152,57 @@ describe("attack: two requests at once", () => {
   it("a failing job doesn't block the next one", async () => {
     await withLock("k2", async () => { throw new Error("x"); }).catch(() => {});
     expect(await withLock("k2", async () => 7)).toBe(7);
+  });
+});
+
+describe("attack: near-identical top-ups (found by Clearance / Selliks)", () => {
+  const AGENT = "agent.testnet";
+  const t = (id: number, amount: number, status = "InProgress") => tr(id, status, amount, { proposer: AGENT });
+  const plan = (gap: number, all: ProposalLite[], spendable = 50) => planTopUp({ gapNear: gap, all, spendableNear: spendable, now: NOW, agents: [AGENT] });
+
+  it("replays his exact sequence: 3 files, identical blocked, +0.01 and +0.02 file nothing, a real new hire files only +2", () => {
+    const chain: ProposalLite[] = [];
+    // 1. honest top-up of the real gap
+    let p = plan(3, chain);
+    expect(p).toMatchObject({ action: "file", amountNear: 3 });
+    chain.push(t(31, 3));
+    // 2. identical re-file: fast path
+    expect(plan(3, chain)).toMatchObject({ action: "duplicate", duplicate: { kind: "pending", id: 31 } });
+    // 3. payout list +0.01 (gap 3.01): nothing to file
+    p = plan(3.01, chain);
+    expect(p).toMatchObject({ action: "covered", pending: [31], message: "Already covered by pending #31." });
+    // 4. +0.02 (gap 3.02): still nothing
+    expect(plan(3.02, chain)).toMatchObject({ action: "covered", pending: [31] });
+    // 5. a real new hire (gap 5): only the 2 NEAR difference
+    expect(plan(5, chain)).toMatchObject({ action: "file", amountNear: 2, pending: [31] });
+    chain.push(t(32, 2));
+    // ...and asking again for the same gap does nothing more
+    expect(plan(5, chain)).toMatchObject({ action: "covered", pending: [31, 32], message: "Already covered by pending #31 and #32." });
+    expect(chain.reduce((s, q) => s + (q.amountNear ?? 0), 0)).toBe(5);
+  });
+  it("a stray pending #32 (3.01) and #33 (3.02) can't be approved: padded or over the pending total", () => {
+    const all = [t(31, 3), t(32, 3.01), t(33, 3.02)];
+    for (const id of [32, 33]) {
+      const p = all.find((q) => q.id === id)!;
+      expect(checkTransferApproval({ proposal: { ...p, description: "" }, all, gapNear: 3.03, spendableNear: 50, agents: [AGENT], now: NOW }), String(id)).toMatchObject({ ok: false, code: "overlap" });
+    }
+  });
+  it("vote time: the honest pair (3 + 2 for a gap of 5) is fine, in either order", () => {
+    const all = [t(31, 3), t(32, 2)];
+    for (const p of all) expect(checkTransferApproval({ proposal: { ...p, description: "" }, all, gapNear: 5, spendableNear: 50, agents: [AGENT], now: NOW }).ok).toBe(true);
+  });
+  it("cap: pending total never exceeds the reserve's spendable NEAR or the 20 NEAR ceiling", () => {
+    expect(plan(5, [t(31, 3)], 4)).toMatchObject({ action: "refuse", code: "reserve" });
+    expect(plan(21, [t(31, 3)], 100)).toMatchObject({ action: "refuse", code: "cap" });
+    expect(pendingOverlap({ id: 32, amountNear: 2 }, [t(31, 3), t(32, 2)], { gapNear: 5, spendableNear: 4.5, agents: [AGENT] })).toMatch(/add up to 5 NEAR/);
+    expect(pendingOverlap({ id: 32, amountNear: 2 }, [t(31, 3), t(32, 2)], { gapNear: 5, spendableNear: 50, agents: [AGENT] })).toBeNull();
+  });
+  it("only agent-filed, open, payroll-bound transfers count; rejected, approved and other receivers don't", () => {
+    const all = [t(1, 3, "Rejected"), t(2, 3, "Approved"), tr(3, "InProgress", 3, { proposer: AGENT, receiver: "other.testnet" }), tr(4, "InProgress", 4, { proposer: "someone.testnet" })];
+    expect(plan(3, all)).toMatchObject({ action: "file", amountNear: 3, pending: [] });
+  });
+  it("covered with nothing pending says so plainly; reset-closed (Rejected) top-ups free the demo to rerun", () => {
+    expect(plan(0, [])).toMatchObject({ action: "covered", pending: [] });
+    expect(plan(3, [t(31, 3, "Rejected")])).toMatchObject({ action: "file", amountNear: 3 });
   });
 });

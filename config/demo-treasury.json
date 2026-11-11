@@ -101,6 +101,7 @@
     "maxPayoutNear": 1000,
     "maxDueDays": 365,
     "maxTopUpNear": 20,
+    "minTopUpNear": 0.1,
     "payCycleDays": 7
   }
 }
