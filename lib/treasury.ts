@@ -17,7 +17,7 @@ export async function loadTreasury() {
     viewAccount(dao),
     getNearBalance(payroll).catch(() => 0),
     getCouncil(dao),
-    getRecentProposals(dao, 8),
+    getRecentProposals(dao, 20),
     Promise.all(demo.trackedTokens.map((t) => getFtBalance(dao, t).catch(() => null))),
   ]);
   const nearBalance = yoctoToNear(daoAccount.amount);
