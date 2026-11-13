@@ -3,7 +3,7 @@
 import { NextResponse } from "next/server";
 import demo from "@/config/demo-treasury.json";
 import { fileRegisterProposal } from "@/lib/chain-write";
-import { getCouncil, getRecentProposals } from "@/lib/sputnik";
+import { getAllProposals, getCouncil } from "@/lib/sputnik";
 import { swapReadiness, tidepoolEnabled } from "@/lib/tidepool";
 import { buildRegisterDescription } from "@/lib/proposal-text";
 import { spendableNear } from "@/lib/treasury";
@@ -17,7 +17,7 @@ export async function POST() {
   if (!dao) return NextResponse.json({ error: "This server isn't connected to a DAO yet." }, { status: 400 });
   if (!tidepoolEnabled()) return NextResponse.json({ error: "The real test swap is switched off on this server." }, { status: 403 });
   try {
-    const [ready, council, recent] = await Promise.all([swapReadiness(dao), getCouncil(dao), getRecentProposals(dao, 10)]);
+    const [ready, council, recent] = await Promise.all([swapReadiness(dao), getCouncil(dao), getAllProposals(dao)]);
     const todo = [
       { contract: T.originContract, label: T.originLabel, why: "can hold it", missing: !ready.usdcRegistered },
       { contract: T.destinationContract, label: T.destinationLabel, why: "can receive it", missing: !ready.wnearRegistered },

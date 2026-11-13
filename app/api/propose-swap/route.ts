@@ -6,7 +6,7 @@ import demo from "@/config/demo-treasury.json";
 import { checkObligations, checkSwapDeposit, checkText, SWAP_BLOCKED_MESSAGE } from "@/lib/guard";
 import { parseObligations } from "@/lib/obligations";
 import { fileSwapProposal } from "@/lib/chain-write";
-import { getCouncil, getRecentProposals } from "@/lib/sputnik";
+import { getAllProposals, getCouncil } from "@/lib/sputnik";
 import { freshLiveQuote, getSwapStatus, swapReadiness, tidepoolEnabled, toBase, TIDEPOOL_LABEL } from "@/lib/tidepool";
 import { buildSwapDescription } from "@/lib/proposal-text";
 import { explorerAccountUrl } from "@/lib/near";
@@ -39,7 +39,7 @@ async function handle(b: any) {
 
   try {
     // One open swap at a time (so the same test USDC can't be promised twice).
-    const [council, recent] = await Promise.all([getCouncil(dao), getRecentProposals(dao, 8)]);
+    const [council, recent] = await Promise.all([getCouncil(dao), getAllProposals(dao)]);
     const open = recent.find((p) => p.swap && p.status === "InProgress" && council.agent.includes(p.proposer));
     // An open swap whose quote has already expired can't be approved any more (demo voting refuses it), so it doesn't block a new one.
     const openStatus = open?.swap ? await getSwapStatus(open.swap.depositAddress).catch(() => null) : null;

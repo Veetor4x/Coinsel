@@ -70,6 +70,46 @@ export async function getRecentProposals(dao: string, max = 5): Promise<Proposal
   return raw.map(summarize).reverse();
 }
 
+/** Reads the chain for the proposal scan (injectable so the paging can be tested without a network). */
+export type ProposalReader = { lastId: () => Promise<number>; page: (fromIndex: number, limit: number) => Promise<any[]> };
+export const PROPOSAL_PAGE = 100;
+const PAGES_AT_ONCE = 4;
+
+/** Page through EVERY proposal (ids 0..last-1), newest first. Safety checks must not depend on a recent-N window. */
+export async function scanAllProposals(read: ProposalReader, pageSize = PROPOSAL_PAGE): Promise<ProposalSummary[]> {
+  const last = await read.lastId();
+  if (!last) return [];
+  const starts: number[] = [];
+  for (let from = 0; from < last; from += pageSize) starts.push(from);
+  const out: ProposalSummary[] = [];
+  for (let i = 0; i < starts.length; i += PAGES_AT_ONCE) {
+    const pages = await Promise.all(starts.slice(i, i + PAGES_AT_ONCE).map((from) => read.page(from, Math.min(pageSize, last - from))));
+    for (const raw of pages) out.push(...raw.map(summarize));
+  }
+  return out.sort((a, b) => b.id - a.id);
+}
+
+const ALL_TTL_MS = 3000;
+const allCache = new Map<string, { at: number; p: Promise<ProposalSummary[]> }>();
+
+/** Drop the short-lived cache right after we file or vote, so the next safety check sees the new state. */
+export function invalidateProposalCache(dao?: string) {
+  if (dao) allCache.delete(dao); else allCache.clear();
+}
+
+/** Every proposal of the DAO, for the safety checks (pending top-ups, duplicates, demo votes, Reset). One paged scan, cached for a few seconds. */
+export function getAllProposals(dao: string): Promise<ProposalSummary[]> {
+  const hit = allCache.get(dao);
+  if (hit && Date.now() - hit.at < ALL_TTL_MS) return hit.p;
+  const p = scanAllProposals({
+    lastId: () => viewFunction<number>(dao, "get_last_proposal_id"),
+    page: (from_index, limit) => viewFunction<any[]>(dao, "get_proposals", { from_index, limit }),
+  });
+  allCache.set(dao, { at: Date.now(), p });
+  p.catch(() => { if (allCache.get(dao)?.p === p) allCache.delete(dao); });
+  return p;
+}
+
 export type FtBalance = { contractId: string; symbol: string; decimals: number; amount: number };
 
 export async function getFtBalance(dao: string, contractId: string): Promise<FtBalance> {
