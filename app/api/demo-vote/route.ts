@@ -2,7 +2,7 @@
 // In real use each council member signs with their own wallet.
 import { NextResponse } from "next/server";
 import { checkDestination, checkRegistration, checkSwapDeposit } from "@/lib/guard";
-import { getProposal, getCouncil } from "@/lib/sputnik";
+import { getProposal, getCouncil, getAllProposals, getNearBalance } from "@/lib/sputnik";
 import { approveAsCouncil, demoCouncil, settledProposal } from "@/lib/chain-write";
 import { env, isDemoMode } from "@/lib/env";
 import demo from "@/config/demo-treasury.json";
@@ -15,7 +15,6 @@ import { analyze } from "@/lib/engine";
 import { gapNear, toEngineInputs } from "@/lib/engine-inputs";
 import { payoutFingerprint } from "@/lib/fingerprint";
 import { checkTransferApproval, isPayrollReceiver } from "@/lib/safety";
-import { getNearBalance } from "@/lib/sputnik";
 
 export const maxDuration = 60;
 
@@ -55,10 +54,10 @@ export async function POST(req: Request) {
     if (isOwnTransfer && p.status === "InProgress") {
       const obs = parseObligations(b?.obligations ?? demo.obligations);
       if (!obs) return NextResponse.json({ error: "Those payouts don't look right. Reload the page and try again." }, { status: 400 });
-      const t = await loadTreasury();
+      const [t, allProposals] = await Promise.all([loadTreasury(), getAllProposals(dao)]);
       const { balances, obligations } = toEngineInputs(t, obs);
       const gap = gapNear(analyze(balances, obligations), demo.demoNearUsdPrice);
-      const ok = checkTransferApproval({ proposal: p, all: t.proposals, gapNear: gap, listFingerprint: payoutFingerprint(obs), now: Date.now(), spendableNear: t.reserve.spendableNear, agents: council.agent });
+      const ok = checkTransferApproval({ proposal: p, all: allProposals, gapNear: gap, listFingerprint: payoutFingerprint(obs), now: Date.now(), spendableNear: t.reserve.spendableNear, agents: council.agent });
       if (!ok.ok) return NextResponse.json({ error: ok.message, code: ok.code, duplicateOf: ok.duplicate?.id }, { status: 409 });
     }
     if (p.status !== "InProgress") return NextResponse.json({ error: `This suggestion is already ${p.status}.` }, { status: 409 });

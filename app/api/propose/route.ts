@@ -5,6 +5,7 @@ import demo from "@/config/demo-treasury.json";
 import { checkDestination, checkObligations, checkText } from "@/lib/guard";
 import { parseObligations } from "@/lib/obligations";
 import { loadTreasury } from "@/lib/treasury";
+import { getAllProposals } from "@/lib/sputnik";
 import { analyze } from "@/lib/engine";
 import { gapNear, toEngineInputs } from "@/lib/engine-inputs";
 import { getDryQuote, usdcToQuote } from "@/lib/intents";
@@ -42,19 +43,19 @@ async function handle(b: { obligations?: unknown; advice?: { text?: unknown; res
 
   try {
     // Recomputed here from the chain + the payouts, so it always equals the gap the advice named.
-    const t = await loadTreasury();
+    const [t, allProposals] = await Promise.all([loadTreasury(), getAllProposals(dao)]); // safety checks see EVERY proposal, not just the recent ones
     const { balances, obligations } = toEngineInputs(t, obs);
     const health = analyze(balances, obligations);
     const gap = gapNear(health, demo.demoNearUsdPrice);
     // Real gap minus whatever the agent already has waiting for votes (any amount). Identical re-files take the fast path.
-    const plan = planTopUp({ gapNear: gap, all: t.proposals, spendableNear: t.reserve.spendableNear, now: Date.now(), agents: t.council.agent });
+    const plan = planTopUp({ gapNear: gap, all: allProposals, spendableNear: t.reserve.spendableNear, now: Date.now(), agents: t.council.agent });
     if (plan.action === "duplicate") {
       const dup = plan.duplicate;
       return NextResponse.json({ status: "duplicate", proposalId: dup.id, message: dup.kind === "pending" ? duplicateMessage(dup) : `Already filed as #${dup.id}. ${duplicateMessage(dup)}`, error: `Already filed as #${dup.id}.` }, { status: 409 });
     }
     if (plan.action === "covered") {
       if (plan.pending.length) return NextResponse.json({ status: "covered", pending: plan.pending, message: plan.message, error: plan.message }, { status: 409 });
-      const sent = t.proposals.find((q) => q.kind === "Transfer" && q.status === "Approved" && q.receiver?.toLowerCase() === demo.payrollAccountId.toLowerCase() && Date.now() - Number(q.submissionTime) <= demo.limits.payCycleDays * 86_400_000);
+      const sent = allProposals.find((q) => q.kind === "Transfer" && q.status === "Approved" && q.receiver?.toLowerCase() === demo.payrollAccountId.toLowerCase() && Date.now() - Number(q.submissionTime) <= demo.limits.payCycleDays * 86_400_000);
       return NextResponse.json({ error: sent && gap <= 0 ? `Already filed as #${sent.id} and approved: payroll is covered.` : plan.message }, { status: 409 });
     }
     if (plan.action === "refuse") return NextResponse.json({ error: plan.message }, { status: 409 });

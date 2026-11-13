@@ -4,7 +4,7 @@
 //  - Demo council members sign act_proposal (DEMO_MODE only) with testnet keys.
 import { Account, actions, nearToYocto } from "near-api-js";
 import { RPC_URL } from "./near";
-import { getProposal } from "./sputnik";
+import { getProposal, invalidateProposalCache } from "./sputnik";
 import { env } from "./env";
 import { buildRegisterKind, buildSwapKind, type ParsedSwap } from "./swap-proposal";
 
@@ -36,6 +36,7 @@ async function addProposal(dao: string, description: string, kind: unknown) {
     ],
     waitUntil: "FINAL",
   });
+  invalidateProposalCache(dao);
   const proposalId = successValue(outcome);
   if (typeof proposalId !== "number") throw new Error("The DAO did not accept the proposal.");
   return { proposalId, txHash: String(outcome.transaction_outcome?.id ?? outcome.transaction?.hash ?? "") };
@@ -79,6 +80,7 @@ export async function approveAsCouncil(dao: string, proposalId: number, member: 
     actions: [actions.functionCall("act_proposal", { id: proposalId, action: "VoteApprove" }, tgas * TGAS, 0n)],
     waitUntil: "FINAL",
   });
+  invalidateProposalCache(dao);
   return { txHash: String(outcome.transaction_outcome?.id ?? "") };
 }
 
@@ -99,6 +101,7 @@ export async function rejectAsCouncil(dao: string, proposalId: number, member: {
     actions: [actions.functionCall("act_proposal", { id: proposalId, action: "VoteReject" }, 100n * TGAS, 0n)],
     waitUntil: "FINAL",
   });
+  invalidateProposalCache(dao);
   return { txHash: String(outcome.transaction_outcome?.id ?? "") };
 }
 
